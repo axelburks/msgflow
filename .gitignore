@@ -1,0 +1,11 @@
+*test*
+*.pyc
+*.spec
+.vscode/*
+.eggs/*
+__pycache__/*
+build*/*
+dist*/*
+*.yaml
+*DS_Store*
+venv
