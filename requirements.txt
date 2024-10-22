@@ -1,5 +1,8 @@
+setuptools==70.3.0
 rumps
 py2app
 pyyaml
 darkdetect
 apscheduler
+pyperclip
+requests

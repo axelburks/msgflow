@@ -87,7 +87,7 @@ class MSGFLOW(object):
             self.app.icon = self.get_menu_icon()
     
     def run(self):
-        with open(os.path.expanduser('~/config.yaml'), 'r') as fp:
+        with open(os.path.expanduser('~/msgflow/config.yaml'), 'r') as fp:
             config = yaml.safe_load(fp)
         db_file = os.path.expanduser('~/Library/Messages/chat.db')
 
@@ -97,7 +97,9 @@ class MSGFLOW(object):
               self.email_list.append(EmailFlow(i['username'], i['password'], i.get('pop_server', 'pop.' + i['username'].split('@')[1])))
           for i in self.email_list:
               self.scheduler.add_job(i.update_hook, trigger)
-        self.smsflow = SMSFlow(db_file)
+        
+        fwd_opt = config.get('forward', {})
+        self.smsflow = SMSFlow(db_file, fwd_opt)
         self.scheduler.add_job(self.smsflow.update_hook, trigger)
         self.scheduler.start()
 

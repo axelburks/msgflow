@@ -13,16 +13,43 @@ class Base(object):
         self.notify = Switcher()
         self.clipboard = Switcher()
 
-    def notify_to_bark(self, title, msg, value):
+    def notify_to_bark(self, dest, title, msg, code=None):
         self.logging.debug(self.notify.status)
         if self.notify.status:
-            title = urllib.parse.quote(title)
-            msg = urllib.parse.quote(msg)
-            value = urllib.parse.quote(value)
-            # TODO
-            for bark_url in []:
-                url = f'{bark_url}/{title}/{msg}?copy={value}'
-                requests.get(url)
+            autoCopy = 1 if code else 0
+            level = 'timeSensitive' if code else 'active'
+            bark_url = dest['server_url']
+            bark_body = {
+                "title": title,
+                "body": msg,
+                "level": level,
+                "autoCopy": autoCopy,
+                "copy": code,
+            }
+            for opt in dest:
+                bark_body[opt] = dest[opt]
+            bark_res = requests.post(bark_url, json=bark_body)
+            if bark_res.status_code != 200:
+                return False, 'Bark API Error: ' + str(bark_res.text)
+            else:
+                return True, bark_res.text
+            
+    def notify_to_tgbot(self, dest, msg):
+        self.logging.debug(self.notify.status)
+        if self.notify.status:
+            tgbot_url = dest['server_url']
+            tgbot_body = {
+                "chat_id": dest['chat_id'],
+                "text": msg,
+                "link_preview_options": {
+                    "is_disabled": True
+                }
+            }
+            tgbot_res = requests.post(tgbot_url, json=tgbot_body)
+            if tgbot_res.status_code != 200:
+                return False, 'Telegram API Error: ' + str(tgbot_res.text)
+            else:
+                return True, tgbot_res.text
 
     def notification(self, title, msg):
         self.logging.debug(self.notify.status)
