@@ -100,6 +100,61 @@ class SMSFlow(Base):
                 
         return result
     
+    def is_filter_matched(self, msg, match, match_type):
+        try:
+            if match_type == 'and':
+                return all(key in msg and re.match(str(pattern), str(msg[key])) for key, pattern in match.items())
+            elif match_type == 'or':
+                return any(key in msg and re.match(str(pattern), str(msg[key])) for key, pattern in match.items())
+        except re.error as e:
+            self.logging.error(f"Regex error: {e}")
+            return False
+        
+    def check_filters(self, msg, filters):
+        if filters:
+            return all(self.is_filter_matched(msg, f['match'], f['type']) for f in filters)
+        else:
+            return True
+    
+    def check_scope(self, msg, scope):
+        if (scope == "code" and "code" in msg) or \
+                    (scope == "nocode" and "code" not in msg) or \
+                        (scope == "all"):
+                            return True
+        else:
+            return False
+                        
+    def forward(self, msg, sms_code, fwd_dest="bark"):
+        receive_timestamp = msg['message_date']
+        receive_timestring = datetime.datetime.fromtimestamp(receive_timestamp)
+        msg_sender = f"{msg['receiver']} <- {msg['sender']}"
+        msg_text = f"{msg['text']}\n{self.fwd_opt['source']} - {receive_timestring}"
+        
+        fwd_msg_title = f"🌀 {sms_code}" if sms_code else msg_sender
+        fwd_msg_body_head = f"{msg_sender}\n" if sms_code else ''
+        fwd_msg_body = f"{fwd_msg_body_head}{msg_text}"
+        
+        for cur_dest in self.fwd_opt['destinations'][fwd_dest]:
+            all_filters_matched = self.check_filters(msg, cur_dest.get('filters'))
+            if all_filters_matched:
+                fwd_scope = cur_dest.get('scope', 'code')
+                uptime_key = f"{fwd_dest}_{cur_dest['name_mark']}"
+                if self.check_scope(msg, fwd_scope) and receive_timestamp > self.update_time[uptime_key]:
+                    if fwd_dest == 'bark':
+                        cur_status, cur_res = self.notify_to_bark(cur_dest, fwd_msg_title, fwd_msg_body, sms_code)
+                    elif fwd_dest == 'tgbot':
+                        fwd_msg_body = f"{msg_sender}\n{msg_text}"
+                        cur_status, cur_res = self.notify_to_tgbot(cur_dest, fwd_msg_body)
+                    else:
+                        self.logging.error(f"Unsupported forward type: {fwd_dest}, skipping...")
+                        return
+                    self.logging.debug(cur_res)
+                    if cur_status:
+                        self.update_time[uptime_key] = receive_timestamp
+                    else:
+                        self.logging.error(f"{uptime_key} 发送失败:{cur_res}")
+                        self.notification(f"{uptime_key} 发送失败", cur_res)
+                        
     def _notify(self):
         msg_new = self.get_msg_with_code()
         msg_new.reverse()
@@ -117,42 +172,9 @@ class SMSFlow(Base):
                     self.update_time['notify_time'] = receive_timestamp
                     
                 # forward messagge
-                fwd_filter_matched = False
-                for filter_item in self.fwd_opt['filter']:
-                    if temp[filter_item] in self.fwd_opt['filter'][filter_item]:
-                        fwd_filter_matched = True
-                if fwd_filter_matched:
-                    receive_timestring = datetime.datetime.fromtimestamp(receive_timestamp)
-                    msg_sender = f"{temp['receiver']} <- {temp['sender']}"
-                    msg_text = f"{temp['text']}\n{self.fwd_opt['source']} - {receive_timestring}"
-                    for fwd_dest in self.fwd_opt['destinations']:
-                        if fwd_dest == 'bark':
-                            bark_title = f"🌀 {sms_code}" if sms_code else msg_sender
-                            bark_body_head = f"{msg_sender}\n" if sms_code else ''
-                            bark_body = f"{bark_body_head}{msg_text}"
-                            for bark_dest in self.fwd_opt['destinations'][fwd_dest]:
-                                fwd_all = bark_dest.get('scope') == 'all'
-                                if (fwd_all or 'code' in temp) and receive_timestamp > self.update_time[f"{fwd_dest}_{bark_dest['name_mark']}"]:
-                                    bark_status, bark_res = self.notify_to_bark(bark_dest, bark_title, bark_body, sms_code)
-                                    self.logging.debug(bark_res)
-                                    if bark_status:
-                                        self.update_time[f"{fwd_dest}_{bark_dest['name_mark']}"] = receive_timestamp
-                                    else:
-                                        self.notification("Bark 发送失败", bark_res)
-                        if fwd_dest == 'tgbot':
-                            tgbot_body = f"{msg_sender}\n{msg_text}"
-                            for tgbot_dest in self.fwd_opt['destinations'][fwd_dest]:
-                                fwd_all = tgbot_dest.get('scope') == 'all'
-                                if (fwd_all or 'code' in temp) and receive_timestamp > self.update_time[f"{fwd_dest}_{tgbot_dest['name_mark']}"]:
-                                    tgbot_status, tgbot_res = self.notify_to_tgbot(tgbot_dest, tgbot_body)
-                                    self.logging.debug(tgbot_res)
-                                    if tgbot_status:
-                                        self.update_time[f"{fwd_dest}_{tgbot_dest['name_mark']}"] = receive_timestamp
-                                    else:
-                                        self.notification("TGBot 发送失败", tgbot_res)
-                    self.min_update_time = min(self.update_time.values())
-                else:
-                    self.min_update_time = receive_timestamp
+                for fwd_dest in self.fwd_opt['destinations']:
+                    self.forward(temp, sms_code, fwd_dest)
+                self.min_update_time = min(self.update_time.values())
     
     def update_hook(self):
         self.logging.debug('checking')
