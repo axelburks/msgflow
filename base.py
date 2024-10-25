@@ -28,9 +28,10 @@ class Base(object):
             }
             for opt in dest:
                 bark_body[opt] = dest[opt]
+            self.logging.info(f"Sending to bark dest: {dest.get('name_mark', '')}")
             bark_res = requests.post(bark_url, json=bark_body)
             if bark_res.status_code != 200:
-                return False, 'Bark API Error: ' + str(bark_res.text)
+                return False, f"Bark API Error: {bark_res.text}"
             else:
                 return True, bark_res.text
             
@@ -45,9 +46,10 @@ class Base(object):
                     "is_disabled": True
                 }
             }
+            self.logging.info(f"Sending to tgbot dest: {dest.get('name_mark', '')}")
             tgbot_res = requests.post(tgbot_url, json=tgbot_body)
             if tgbot_res.status_code != 200:
-                return False, 'Telegram API Error: ' + str(tgbot_res.text)
+                return False, f"Telegram API Error: {tgbot_res.text}"
             else:
                 return True, tgbot_res.text
 
