@@ -6,3 +6,4 @@ darkdetect
 apscheduler
 pyperclip
 requests
+pytypedstream
