@@ -2,6 +2,7 @@ import os
 import yaml
 import logging
 import platform
+import time
 
 import rumps
 import darkdetect
@@ -89,6 +90,13 @@ class MSGFLOW(object):
     def run(self):
         with open(os.path.expanduser('~/msgflow/config.yaml'), 'r') as fp:
             config = yaml.safe_load(fp)
+        last_fwd_time_file = os.path.expanduser('~/msgflow/last_fwd_time')
+        if os.path.exists(last_fwd_time_file):
+            with open(last_fwd_time_file, 'r') as fp:
+                last_fwd_time = int(fp.read().strip())
+        else:
+            last_fwd_time = int(time.time())
+
         db_file = os.path.expanduser('~/Library/Messages/chat.db')
 
         trigger = IntervalTrigger(seconds=3)
@@ -99,7 +107,7 @@ class MSGFLOW(object):
               self.scheduler.add_job(i.update_hook, trigger)
         
         fwd_opt = config.get('forward', {})
-        self.smsflow = SMSFlow(db_file, fwd_opt)
+        self.smsflow = SMSFlow(db_file, fwd_opt, last_fwd_time_file, last_fwd_time)
         self.scheduler.add_job(self.smsflow.update_hook, trigger)
         self.scheduler.start()
 
