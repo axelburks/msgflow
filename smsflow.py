@@ -4,6 +4,7 @@ import time
 import logging
 import sqlite3
 import re
+import json
 import datetime
 import typedstream
 
@@ -34,7 +35,7 @@ class LiteDB(object):
 
 
 class SMSFlow(Base):
-    def __init__(self, db_file, fwd_opt, last_fwd_time_file, last_fwd_time):
+    def __init__(self, db_file, fwd_opt, last_fwd_time_file):
         super(SMSFlow, self).__init__()
         self.db_file = db_file
         self.db = LiteDB(self.db_file)
@@ -43,13 +44,28 @@ class SMSFlow(Base):
             "title": "{{receiver}} <- {{sender}}",
             "body": "{{text}}\n{{source}} - {{receive_time}}"
         }
+        self.is_1st_start = True
+        init_timestamp = int(time.time())
+        saved_update_time = None
+        self.update_time = {}
         self.last_fwd_time_file = last_fwd_time_file
-        self.min_update_time = last_fwd_time
-        self.update_time = { "notify_time": int(time.time()) }
-        for key, value in fwd_opt['destinations'].items():
+        if os.path.exists(self.last_fwd_time_file):
+            with open(self.last_fwd_time_file, 'r') as fp:
+                saved_update_time = json.load(fp)
+        for key, value in self.fwd_opt['destinations'].items():
             for item in value:
-                name_mark = item['name_mark']
-                self.update_time[f"{key}_{name_mark}"] = last_fwd_time
+                c_dest_name = f"{key}_{item['name_mark']}"
+                if saved_update_time and c_dest_name in saved_update_time:
+                    self.update_time[c_dest_name] = saved_update_time[c_dest_name]
+                else:
+                    self.update_time[c_dest_name] = init_timestamp
+        self.update_time['notify_time'] = init_timestamp
+        self.min_update_time = min(self.update_time.values())
+        
+    def write_last_fwd_time_ro_file(self):
+        self.is_1st_start = False
+        with open(self.last_fwd_time_file, 'w') as f:
+            json.dump(self.update_time, f, indent=4)
     
     def get_msg_from_applearchive(self, archived_object):
         msgs = []
@@ -81,6 +97,8 @@ class SMSFlow(Base):
         where
             is_from_me = 0
             and (message.date / 1000000000 + 978307200) > {min_update_time}
+        order by
+            message.date
         """
         data = self.db.select(sql.format(min_update_time=self.min_update_time))
         for row in data[:]:
@@ -96,8 +114,6 @@ class SMSFlow(Base):
         return data
     
     def get_msg_with_code(self):
-        self.logging.debug(self.update_time)
-        self.logging.debug('self.min_update_time:' + str(self.min_update_time))
         msgs = self.get_message()
         result = []
         
@@ -153,7 +169,7 @@ class SMSFlow(Base):
             fwd_msg_title = fwd_msg_title_code
         return fwd_msg_title, fwd_msg_body
             
-    def forward(self, msg, fwd_dest="bark"):
+    def forward(self, msg, fwd_dest):
         c_template = {**self.template, **self.fwd_opt.get('template', {})}
 
         for cur_dest in self.fwd_opt['destinations'][fwd_dest]:
@@ -169,21 +185,24 @@ class SMSFlow(Base):
                     elif fwd_dest == 'tgbot':
                         cur_status, cur_res = self.notify_to_tgbot(cur_dest, fwd_msg_title, fwd_msg_body, msg.get('code'))
                     else:
-                        self.logging.error(f"Unsupported forward type: {fwd_dest}, skipping...")
+                        self.logging.error(f"Unsupported forward type: {fwd_dest}, stopping...")
                         return False
                     self.logging.debug(cur_res)
                     if cur_status:
                         self.update_time[uptime_key] = msg['message_date']
                     else:
                         self.logging.error(f"{uptime_key} 发送失败:{cur_res}")
-                        self.notification(f"{uptime_key} 发送失败", cur_res)
+                        self.notification(f"{uptime_key} 发送失败", str(cur_res))
                         return False
             else:
                  self.update_time[uptime_key] = msg['message_date']
         return True
-                
-                        
+        
     def _notify(self):
+        self.min_update_time = min(self.update_time.values())
+        self.logging.debug(self.update_time)
+        self.logging.debug('self.min_update_time:' + str(self.min_update_time))
+        c_timestamp = int(time.time())
         msgs_with_code = self.get_msg_with_code()
         self.logging.debug(msgs_with_code)
 
@@ -198,10 +217,19 @@ class SMSFlow(Base):
                 # forward messagge
                 for fwd_dest in self.fwd_opt['destinations']:
                     if not self.forward(temp, fwd_dest):
+                        self.write_last_fwd_time_ro_file()
                         return False
-                self.min_update_time = min(self.update_time.values())
-                with open(self.last_fwd_time_file, 'w') as file:
-                    file.write(str(self.min_update_time))
+
+                # write forward time to file for every new msg
+                self.write_last_fwd_time_ro_file()
+                
+        elif c_timestamp - self.min_update_time > 60 * 10:
+            # write forward time to file only when no message received for 10 minutes
+            self.update_time = {key: c_timestamp for key in self.update_time}
+            self.write_last_fwd_time_ro_file()
+
+        elif self.is_1st_start:
+            self.write_last_fwd_time_ro_file()
     
     def update_hook(self):
         self.logging.debug('checking')
