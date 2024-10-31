@@ -106,7 +106,7 @@ class SMSFlow(Base):
                 if row['attributedBody']:
                     msg_text = self.get_msg_from_applearchive(row['attributedBody'])
                     row['text'] = msg_text
-                    row['attributedBody'] = msg_text
+                    row['attributedBody'] = ''
                 else:
                     data.remove(row)
             else:
@@ -174,9 +174,9 @@ class SMSFlow(Base):
 
         for cur_dest in self.fwd_opt['destinations'][fwd_dest]:
             uptime_key = f"{fwd_dest}_{cur_dest['name_mark']}"
-            all_filters_matched = self.check_filters(msg, cur_dest.get('filters'))
-            if all_filters_matched:
-                if msg['message_date'] > self.update_time[uptime_key]:
+            if msg['message_date'] > self.update_time[uptime_key]:
+                all_filters_matched = self.check_filters(msg, cur_dest.get('filters'))
+                if all_filters_matched:
                     c_template.update(cur_dest.get('template', {}))
                     fwd_msg_title, fwd_msg_body = self.gen_fwd_msg(msg, c_template)
                     
@@ -194,8 +194,8 @@ class SMSFlow(Base):
                         self.logging.error(f"{uptime_key} 发送失败:{cur_res}")
                         self.notification(f"{uptime_key} 发送失败", str(cur_res))
                         return False
-            else:
-                 self.update_time[uptime_key] = msg['message_date']
+                else:
+                    self.update_time[uptime_key] = msg['message_date']
         return True
         
     def _notify(self):
@@ -209,10 +209,11 @@ class SMSFlow(Base):
         if msgs_with_code:
             for temp in msgs_with_code:
                 # notify message
-                if temp['message_date'] > self.update_time['notify_time'] and temp.get('code'):
-                    self.notification(temp['code'], temp['text'])
-                    self.save_to_clipboard(temp['code'])
+                if temp['message_date'] > self.update_time['notify_time']:
                     self.update_time['notify_time'] = temp['message_date']
+                    if temp.get('code'):
+                        self.notification(temp['code'], temp['text'])
+                        self.save_to_clipboard(temp['code'])
                     
                 # forward messagge
                 for fwd_dest in self.fwd_opt['destinations']:
@@ -220,14 +221,15 @@ class SMSFlow(Base):
                         self.write_last_fwd_time_ro_file()
                         return False
 
-                # write forward time to file for every new msg
-                self.write_last_fwd_time_ro_file()
-                
+            # write forward time to file after all messages processed
+            self.write_last_fwd_time_ro_file()
+            
+        # write forward time to file only when no message received for 10 minutes   
         elif c_timestamp - self.min_update_time > 60 * 10:
-            # write forward time to file only when no message received for 10 minutes
             self.update_time = {key: c_timestamp for key in self.update_time}
             self.write_last_fwd_time_ro_file()
-
+            
+        # write forward time to file when first start to avoid long time waiting
         elif self.is_1st_start:
             self.write_last_fwd_time_ro_file()
     
