@@ -1,6 +1,7 @@
 import logging
 import urllib.parse
 import subprocess
+import html
 
 import rumps
 import requests
@@ -43,8 +44,13 @@ class Base(object):
         if self.notify.status:
             try:
                 tgbot_url = dest['server_url']
+                title = html.escape(title)
+                msg = html.escape(msg)
+                title = title.replace(code, f"<code>{code}</code>") if code else title
+                msg = msg.replace(code, f"<code>{code}</code>") if code else msg
                 tgbot_body = {
                     "text": f"{title}\n{msg}",
+                    "parse_mode": "HTML",
                 }
                 unneedkeys = ['name_mark', 'filters', 'server_url', 'template']
                 tgbot_body.update({key: dest[key] for key in dest if key not in unneedkeys})            

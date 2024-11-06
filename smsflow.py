@@ -3,7 +3,7 @@ import re
 import time
 import logging
 import sqlite3
-import re
+import regex
 import json
 import datetime
 import typedstream
@@ -117,18 +117,18 @@ class SMSFlow(Base):
         msgs = self.get_message()
         result = []
         
-        pattern_flags = r'(?<!回复|获取)验证(密)?码|授权码|校验码|检验码|确认码|激活码|动态码|安全码|(验证)?代码|校验代码|检验代码|激活代码|确认代码|动态代码|安全代码|登入码|认证码|识别码|短信口令|动态密码|交易码|上网密码|动态口令|随机码|驗證碼|授權碼|校驗碼|檢驗碼|確認碼|激活碼|動態碼|(驗證)?代碼|校驗代碼|檢驗代碼|確認代碼|激活代碼|動態代碼|登入碼|認證碼|識別碼|一次性密码|一次性密碼|[Cc][Oo][Dd][Ee]|[Vv]erification|[Vv]alidation|[Ss]ecurity [Cc]ode'
-        pattern_captchas = r'(?<![A-Za-z0-9])[0-9-]{4,8}(?![A-Za-z0-9]|\]-|\] -|-| -)'
-        
-        for i in msgs:
-            msg_escaped = re.sub(r'((https?|ftp|file):\/\/|www\.)[-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]|\n', ' ', i['text'], flags=re.I)
+        pattern_flags = r"(?<!回复|回覆|获取|獲取)((验证|授权|校验|检验|确认|激活|动态|安全|登入|认证|识别|交易|短信|授权|随机|一次性)(代?码|口令|密码|编码)|(驗證|授權|校驗|檢驗|確認|激活|動態|安全|登入|認證|識別|交易|短信|授權|隨機|一次性)(代?碼|口令|密碼|編碼)|([Vv]erification|[Vv]alidation|[Ss]ecurity)? ?[Cc]ode)"
+        pattern_captchas = r"(?<!(联系|聯繫|结尾|結尾|尾号|尾號|ending |[A-Za-z0-9]))([0-9-]{4,8})(?![A-Za-z0-9]|\]?(-| -))"
 
-            match_flags = re.search(pattern_flags, msg_escaped, flags=re.I)
-            matches_captchas = re.findall(pattern_captchas, msg_escaped)
+        for i in msgs:
+            msg_escaped = regex.sub(r'((https?|ftp|file):\/\/|www\.)[-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]|\n', ' ', i['text'], flags=regex.I)
+
+            match_flags = regex.search(pattern_flags, msg_escaped, flags=regex.I)
+            matches_captchas = regex.findall(pattern_captchas, msg_escaped)
             
             if match_flags and matches_captchas:
                 flag_index = msg_escaped.find(match_flags.group())
-                closest_captcha = min(matches_captchas, key=lambda x: abs(msg_escaped.find(x) - flag_index))
+                closest_captcha = min(matches_captchas, key=lambda x: abs(msg_escaped.find(x[1]) - flag_index))[1]
                 i['code'] = closest_captcha
             result.append(i)
                 
@@ -137,12 +137,12 @@ class SMSFlow(Base):
     def is_filter_matched(self, msg, match, match_type):
         try:
             if match_type == 'and':
-                return all(key in msg and re.match(str(pattern), str(msg[key])) for key, pattern in match.items())
+                return all(key in msg and regex.match(str(pattern), str(msg[key])) for key, pattern in match.items())
             elif match_type == 'or':
-                return any(key in msg and re.match(str(pattern), str(msg[key])) for key, pattern in match.items())
+                return any(key in msg and regex.match(str(pattern), str(msg[key])) for key, pattern in match.items())
             elif match_type == 'selector':
                 return all((pattern == 'have' and key in msg) or (pattern == 'none' and key not in msg) for key, pattern in match.items())
-        except re.error as e:
+        except regex.error as e:
             self.logging.error(f"Regex error: {e}")
             return False
         

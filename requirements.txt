@@ -7,3 +7,4 @@ apscheduler
 pyperclip
 requests
 pytypedstream
+regex
