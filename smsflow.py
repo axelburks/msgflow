@@ -61,6 +61,7 @@ class SMSFlow(Base):
                     self.update_time[c_dest_name] = init_timestamp
         self.update_time['notify_time'] = init_timestamp
         self.min_update_time = min(self.update_time.values())
+        self.last_runtime = init_timestamp
         
     def write_last_fwd_time_ro_file(self):
         self.is_1st_start = False
@@ -235,4 +236,16 @@ class SMSFlow(Base):
     
     def update_hook(self):
         self.logging.debug('checking')
+        now_time = int(time.time())
+        if now_time - self.last_runtime > 80:
+            fwd_msg_title = f"Too long time waiting..."
+            fwd_msg_body = f"now_time: {datetime.datetime.fromtimestamp(now_time)}; last_runtime: {datetime.datetime.fromtimestamp(self.last_runtime)};"
+            self.notify_to_tgbot({
+                "server_url": "https://api.telegram.org/***/sendMessage",
+                "link_preview_options": {
+                    "is_disabled": True
+                },
+                "chat_id": ***
+            }, fwd_msg_title, fwd_msg_body)
+        self.last_runtime = now_time
         self._notify()

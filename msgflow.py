@@ -103,12 +103,16 @@ class MSGFLOW(object):
         
         fwd_opt = config.get('forward', {})
         self.smsflow = SMSFlow(db_file, fwd_opt, last_fwd_time_file)
-        self.scheduler.add_job(self.smsflow.update_hook, trigger)
-        self.scheduler.start()
+        # self.scheduler.add_job(self.smsflow.update_hook, trigger)
+        # self.scheduler.start()
+        # 临时改为while循环，规避scheduler无法定时执行的问题
+        while True:
+            self.smsflow.update_hook()
+            time.sleep(3)
 
-        trigger = IntervalTrigger(seconds=2)
-        self.app_scheduler.add_job(self.update_menu_icon, trigger)
-        self.app_scheduler.start()
+        # trigger = IntervalTrigger(seconds=2)
+        # self.app_scheduler.add_job(self.update_menu_icon, trigger)
+        # self.app_scheduler.start()
 
         self.app.run()
 
