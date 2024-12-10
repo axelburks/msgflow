@@ -51,7 +51,10 @@ class SMSFlow(Base):
         self.last_fwd_time_file = last_fwd_time_file
         if os.path.exists(self.last_fwd_time_file):
             with open(self.last_fwd_time_file, 'r') as fp:
-                saved_update_time = json.load(fp)
+                try:
+                    saved_update_time = json.load(fp)
+                except Exception as e:
+                    print(f"Reading last_fwd_time_file with error: {e}")
         for key, value in self.fwd_opt['destinations'].items():
             for item in value:
                 c_dest_name = f"{key}_{item['name_mark']}"
@@ -61,7 +64,6 @@ class SMSFlow(Base):
                     self.update_time[c_dest_name] = init_timestamp
         self.update_time['notify_time'] = init_timestamp
         self.min_update_time = min(self.update_time.values())
-        self.last_runtime = init_timestamp
         
     def write_last_fwd_time_ro_file(self):
         self.is_1st_start = False
@@ -105,35 +107,13 @@ class SMSFlow(Base):
         for row in data[:]:
             if not row['text']:
                 if row['attributedBody']:
-                    msg_text = self.get_msg_from_applearchive(row['attributedBody'])
-                    row['text'] = msg_text
+                    row['text'] = self.get_msg_from_applearchive(row['attributedBody'])
                     row['attributedBody'] = ''
                 else:
                     data.remove(row)
             else:
                 row['attributedBody'] = ''
         return data
-    
-    def get_msg_with_code(self):
-        msgs = self.get_message()
-        result = []
-        
-        pattern_flags = r"(?<!回复|回覆|获取|獲取)((验证|授权|校验|检验|确认|激活|动态|安全|登入|认证|识别|交易|短信|授权|随机|一次性)(代?码|口令|密码|编码)|(驗證|授權|校驗|檢驗|確認|激活|動態|安全|登入|認證|識別|交易|短信|授權|隨機|一次性)(代?碼|口令|密碼|編碼)|([Vv]erification|[Vv]alidation|[Ss]ecurity)? ?[Cc]ode)"
-        pattern_captchas = r"(?<!(联系|聯繫|结尾|結尾|尾号|尾號|ending |[A-Za-z0-9]))([0-9-]{4,8})(?![A-Za-z0-9]|\]?(-| -))"
-
-        for i in msgs:
-            msg_escaped = regex.sub(r'((https?|ftp|file):\/\/|www\.)[-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]|\n', ' ', i['text'], flags=regex.I)
-
-            match_flags = regex.search(pattern_flags, msg_escaped, flags=regex.I)
-            matches_captchas = regex.findall(pattern_captchas, msg_escaped)
-            
-            if match_flags and matches_captchas:
-                flag_index = msg_escaped.find(match_flags.group())
-                closest_captcha = min(matches_captchas, key=lambda x: abs(msg_escaped.find(x[1]) - flag_index))[1]
-                i['code'] = closest_captcha
-            result.append(i)
-                
-        return result
     
     def is_filter_matched(self, msg, match, match_type):
         try:
@@ -158,13 +138,13 @@ class SMSFlow(Base):
             return otemplate.replace('{{sender}}', msg['sender'])\
                             .replace('{{receiver}}', msg['receiver'])\
                             .replace('{{text}}', msg['text'])\
-                            .replace('{{msg_code}}', msg.get('code', ''))\
+                            .replace('{{msg_code}}', msg.get('code') or '')\
                             .replace('{{source}}', self.fwd_opt.get('source', 'Monitor'))\
                             .replace('{{receive_time}}', str(datetime.datetime.fromtimestamp(msg['message_date'])))
         
         fwd_msg_title = template_repl(msg_template['title']) if msg_template.get('title') else ''
         fwd_msg_body = template_repl(msg_template['body']) if msg_template.get('body') else ''
-        fwd_msg_title_code = template_repl(msg_template['title_code']) if msg_template.get('title_code') and 'code' in msg else ''
+        fwd_msg_title_code = template_repl(msg_template['title_code']) if msg_template.get('title_code') and msg.get('code') else ''
         if fwd_msg_title_code:
             fwd_msg_body = f"{fwd_msg_title}\n{fwd_msg_body}"
             fwd_msg_title = fwd_msg_title_code
@@ -204,18 +184,19 @@ class SMSFlow(Base):
         self.logging.debug(self.update_time)
         self.logging.debug('self.min_update_time:' + str(self.min_update_time))
         c_timestamp = int(time.time())
-        msgs_with_code = self.get_msg_with_code()
-        self.logging.debug(msgs_with_code)
-
-        if msgs_with_code:
-            for temp in msgs_with_code:
+        
+        msgs = self.get_message()
+        if msgs:
+            self.logging.info(msgs)
+            for temp in msgs:
+                # get code from message
+                temp['code'] = self.get_code_from_msg(temp['text'])
                 # notify message
                 if temp['message_date'] > self.update_time['notify_time']:
                     self.update_time['notify_time'] = temp['message_date']
                     if temp.get('code'):
                         self.notification(temp['code'], temp['text'])
                         self.save_to_clipboard(temp['code'])
-                    
                 # forward messagge
                 for fwd_dest in self.fwd_opt['destinations']:
                     if not self.forward(temp, fwd_dest):
@@ -236,16 +217,4 @@ class SMSFlow(Base):
     
     def update_hook(self):
         self.logging.debug('checking')
-        now_time = int(time.time())
-        if now_time - self.last_runtime > 80:
-            fwd_msg_title = f"Too long time waiting..."
-            fwd_msg_body = f"now_time: {datetime.datetime.fromtimestamp(now_time)}; last_runtime: {datetime.datetime.fromtimestamp(self.last_runtime)};"
-            self.notify_to_tgbot({
-                "server_url": "https://api.telegram.org/***/sendMessage",
-                "link_preview_options": {
-                    "is_disabled": True
-                },
-                "chat_id": ***
-            }, fwd_msg_title, fwd_msg_body)
-        self.last_runtime = now_time
         self._notify()
