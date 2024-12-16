@@ -122,7 +122,7 @@ class SMSFlow(Base):
             elif match_type == 'or':
                 return any(key in msg and regex.match(str(pattern), str(msg[key])) for key, pattern in match.items())
             elif match_type == 'selector':
-                return all((pattern == 'have' and key in msg) or (pattern == 'none' and key not in msg) for key, pattern in match.items())
+                return all((pattern == 'have' and msg.get(key)) or (pattern == 'none' and not msg.get(key)) for key, pattern in match.items())
         except regex.error as e:
             self.logging.error(f"Regex error: {e}")
             return False
