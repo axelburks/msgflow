@@ -105,9 +105,9 @@ class SMSFlow(Base):
         """
         data = self.db.select(sql.format(min_update_time=self.min_update_time))
         for row in data[:]:
-            if not row['text']:
-                if row['attributedBody']:
-                    row['text'] = self.get_msg_from_applearchive(row['attributedBody'])
+            if not row.get('text'):
+                if row.get('attributedBody'):
+                    row['text'] = self.get_msg_from_applearchive(row.get('attributedBody'))
                     row['attributedBody'] = ''
                 else:
                     data.remove(row)
@@ -135,12 +135,12 @@ class SMSFlow(Base):
     
     def gen_fwd_msg(self, msg, msg_template):
         def template_repl(otemplate):
-            return otemplate.replace('{{sender}}', msg['sender'])\
-                            .replace('{{receiver}}', msg['receiver'])\
-                            .replace('{{text}}', msg['text'])\
+            return otemplate.replace('{{sender}}', msg.get('sender', ''))\
+                            .replace('{{receiver}}', msg.get('receiver', ''))\
+                            .replace('{{text}}', msg.get('text', ''))\
                             .replace('{{msg_code}}', msg.get('code') or '')\
                             .replace('{{source}}', self.fwd_opt.get('source', 'Monitor'))\
-                            .replace('{{receive_time}}', str(datetime.datetime.fromtimestamp(msg['message_date'])))
+                            .replace('{{receive_time}}', str(datetime.datetime.fromtimestamp(msg.get('message_date', 0))))
         
         fwd_msg_title = template_repl(msg_template['title']) if msg_template.get('title') else ''
         fwd_msg_body = template_repl(msg_template['body']) if msg_template.get('body') else ''
@@ -155,7 +155,7 @@ class SMSFlow(Base):
 
         for cur_dest in self.fwd_opt['destinations'][fwd_dest]:
             uptime_key = f"{fwd_dest}_{cur_dest['name_mark']}"
-            if msg['message_date'] > self.update_time[uptime_key]:
+            if msg.get('message_date', 0) > self.update_time[uptime_key]:
                 all_filters_matched = self.check_filters(msg, cur_dest.get('filters'))
                 if all_filters_matched:
                     c_template.update(cur_dest.get('template', {}))
@@ -170,13 +170,13 @@ class SMSFlow(Base):
                         return False
                     self.logging.debug(cur_res)
                     if cur_status:
-                        self.update_time[uptime_key] = msg['message_date']
+                        self.update_time[uptime_key] = msg.get('message_date', 0)
                     else:
                         self.logging.error(f"{uptime_key} 发送失败:{cur_res}")
                         self.notification(f"{uptime_key} 发送失败", str(cur_res))
                         return False
                 else:
-                    self.update_time[uptime_key] = msg['message_date']
+                    self.update_time[uptime_key] = msg.get('message_date', 0)
         return True
         
     def _notify(self):
@@ -190,7 +190,7 @@ class SMSFlow(Base):
             self.logging.info(msgs)
             for temp in msgs:
                 # get code from message
-                temp['code'] = self.get_code_from_msg(temp['text'])
+                temp['code'] = self.get_code_from_msg(temp.get('text'))
                 # notify message
                 if temp['message_date'] > self.update_time['notify_time']:
                     self.update_time['notify_time'] = temp['message_date']
@@ -217,4 +217,16 @@ class SMSFlow(Base):
     
     def update_hook(self):
         self.logging.debug('checking')
-        self._notify()
+        try:
+            self._notify()
+        except Exception as e:
+            self.logging.error(f"Error occurred: {e}")
+            try:
+                for fwd_dest in self.fwd_opt['destinations']:
+                    for cur_dest in self.fwd_opt['destinations'][fwd_dest]:
+                        if fwd_dest == 'bark':
+                            self.logging.error(self.notify_to_bark(cur_dest, "Error occurred", f"{e}"))
+                        elif fwd_dest == 'tgbot':
+                            self.logging.error(self.notify_to_tgbot(cur_dest, "Error occurred", f"{e}"))
+            except Exception as e:
+                self.logging.error(f"❌ Error occurred when sending error message: {e}")
