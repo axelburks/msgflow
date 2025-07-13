@@ -1,13 +1,40 @@
-import os
-import logging
-import urllib.parse
-import subprocess
-import html
-import regex
-import json
+import os, logging, json, html, subprocess
+import requests, regex, yaml, pyperclip
 
-import requests
-import pyperclip
+config_dir = '~/.config/msgflow'
+config_file = 'config.yaml'
+record_file = 'record.json'
+
+class Config:
+    def __init__(self):
+        self._debug_mode = False
+        self._update_config()
+    
+    def _update_config(self):
+        self._config_file_path = os.path.expanduser(f"{config_dir}/{config_file}")
+        self._record_file_path = os.path.expanduser(f"{config_dir}/{record_file}")
+        with open(self._config_file_path, 'r') as fp:
+            self._user_config = yaml.safe_load(fp)
+
+    @property
+    def debug_mode(self):
+        return self._debug_mode
+    
+    @debug_mode.setter
+    def debug_mode(self, value):
+        self._debug_mode = value
+        if self._debug_mode:
+            global config_dir
+            config_dir = f"{config_dir}/debug"
+        self._update_config()
+
+    @property
+    def record_file_path(self):
+        return self._record_file_path
+    
+    @property
+    def user_config(self):
+        return self._user_config
 
 class Base(object):
 
@@ -87,8 +114,11 @@ class Base(object):
 
     def save_to_clipboard(self, code):
         pyperclip.copy(str(code))
-        
-        
+
+
+config = Config()
+
+
 if __name__ == '__main__':
     try:
         with open(os.path.expanduser(f"./sms/sms.json"), 'r') as f:

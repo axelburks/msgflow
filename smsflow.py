@@ -1,14 +1,10 @@
-import os
-import re
-import time
-import logging
-import sqlite3
-import regex
-import json
-import datetime
-import typedstream
+import os, time, datetime, json, sqlite3
+import regex, typedstream
 
+from base import config
 from base import Base
+
+message_db_file_path = os.path.expanduser('~/Library/Messages/chat.db')
 
 class LiteDB(object):
     def __init__(self, db_file):
@@ -35,11 +31,10 @@ class LiteDB(object):
 
 
 class SMSFlow(Base):
-    def __init__(self, db_file, fwd_opt, last_fwd_time_file):
+    def __init__(self):
         super(SMSFlow, self).__init__()
-        self.db_file = db_file
-        self.db = LiteDB(self.db_file)
-        self.fwd_opt = fwd_opt
+        self.db = LiteDB(db_file=message_db_file_path)
+        self.fwd_opt = config.user_config.get('forward', {})
         self.template = {
             "title": "{{receiver}} <- {{sender}}",
             "body": "{{text}}\n{{source}} - {{receive_time}}"
@@ -48,7 +43,7 @@ class SMSFlow(Base):
         init_timestamp = int(time.time())
         saved_update_time = None
         self.update_time = {}
-        self.last_fwd_time_file = last_fwd_time_file
+        self.last_fwd_time_file = config.record_file_path
         if os.path.exists(self.last_fwd_time_file):
             with open(self.last_fwd_time_file, 'r') as fp:
                 try:
