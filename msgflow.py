@@ -19,7 +19,7 @@ class MSGFLOW(object):
         self.mode = mode
     
     def run(self):
-        config_dir = '~/msgflow'
+        config_dir = '~/config/msgflow'
         config_file = "config.yaml" if self.mode == "release" else "config_debug.yaml"
         last_fwd_time_file = "last_fwd_time.json" if self.mode == "release" else "last_fwd_time_debug.json"
         config_file_path = f"{config_dir}/{config_file}"

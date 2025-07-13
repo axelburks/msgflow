@@ -19,7 +19,7 @@ class Base(object):
         if not msg:
             return None
         
-        pattern_flags = r"(?<!回复|回覆|获取|獲取)((验证|授权|校验|检验|确认|激活|动态|安全|登入|认证|识别|交易|短信|授权|随机|一次性)(代?码|口令|密码|编码)|(驗證|授權|校驗|檢驗|確認|激活|動態|安全|登入|認證|識別|交易|短信|授權|隨機|一次性)(代?碼|口令|密碼|編碼)|([Vv]erification|[Vv]alidation|[Ss]ecurity)? ?[Cc]ode)"
+        pattern_flags = r"(?<!回复|回覆|获取|獲取)((验证|驗證|授权|授權|校验|校驗|检验|檢驗|确认|確認|激活|激活|动态|動態|安全|登入|登入|认证|認證|识别|識別|交易|短信|随机|隨機|一次性)(代?码|代?碼|口令|密码|密碼|编码|編碼|序号|序號)|([Vv]erification|[Vv]alidation|[Ss]ecurity)? ?[Cc]ode)"
         pattern_captchas = r"(?<!(联系|聯繫|结尾|結尾|尾号|尾號|尾4位|ending |[A-Za-z0-9]))([0-9-]{4,8})(?![A-Za-z0-9]|\]?(-| -))"
 
         msg_escaped = regex.sub(r'((https?|ftp|file):\/\/|www\.)[-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]|\n', ' ', msg, flags=regex.I)
