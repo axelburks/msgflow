@@ -59,6 +59,7 @@ class SMSFlow(Base):
                     self.update_time[c_dest_name] = init_timestamp
         self.update_time['notify_time'] = init_timestamp
         self.min_update_time = min(self.update_time.values())
+        self.last_new_msg_time = init_timestamp
         
     def write_last_fwd_time_ro_file(self):
         self.is_1st_start = False
@@ -173,8 +174,19 @@ class SMSFlow(Base):
                 else:
                     self.update_time[uptime_key] = msg.get('message_date', 0)
         return True
+    
+    def monitor2notify(self, title, body, dests):
+        try:
+            for fwd_dest in dests:
+                for cur_dest in self.fwd_opt['destinations'][fwd_dest]:
+                    if fwd_dest == 'bark':
+                        self.logging.error(self.notify_to_bark(cur_dest, title, body, badge=1))
+                    elif fwd_dest == 'tgbot':
+                        self.logging.error(self.notify_to_tgbot(cur_dest, title, body))
+        except Exception as e:
+            self.logging.error(f"❌ Error occurred when sending message: {e}")
         
-    def _notify(self):
+    def _check2notify(self):
         self.min_update_time = min(self.update_time.values())
         self.logging.debug(self.update_time)
         self.logging.debug('self.min_update_time:' + str(self.min_update_time))
@@ -182,6 +194,7 @@ class SMSFlow(Base):
         
         msgs = self.get_message()
         if msgs:
+            self.last_new_msg_time = c_timestamp
             self.logging.info(msgs)
             for temp in msgs:
                 # get code from message
@@ -209,19 +222,17 @@ class SMSFlow(Base):
         # write forward time to file when first start to avoid long time waiting
         elif self.is_1st_start:
             self.write_last_fwd_time_ro_file()
+
+        # notify when no message received for every 24 hours
+        if c_timestamp - self.last_new_msg_time > 60 * 60 * 24:
+            self.notification("No message received for 24h", "")
+            self.monitor2notify(f"{self.fwd_opt.get('source')}: No message received for 24h", "", ["bark"])
+            self.last_new_msg_time = c_timestamp
     
     def update_hook(self):
         self.logging.debug('checking')
         try:
-            self._notify()
+            self._check2notify()
         except Exception as e:
             self.logging.error(f"Error occurred: {e}")
-            try:
-                for fwd_dest in self.fwd_opt['destinations']:
-                    for cur_dest in self.fwd_opt['destinations'][fwd_dest]:
-                        if fwd_dest == 'bark':
-                            self.logging.error(self.notify_to_bark(cur_dest, "Error occurred", f"{e}"))
-                        elif fwd_dest == 'tgbot':
-                            self.logging.error(self.notify_to_tgbot(cur_dest, "Error occurred", f"{e}"))
-            except Exception as e:
-                self.logging.error(f"❌ Error occurred when sending error message: {e}")
+            self.monitor2notify(f"{self.fwd_opt.get('source')}: Error occurred", f"{e}", ["bark", "tgbot"])

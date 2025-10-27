@@ -61,7 +61,7 @@ class Base(object):
         
         return msg_code
 
-    def notify_to_bark(self, dest, title, msg, code=None):
+    def notify_to_bark(self, dest, title, msg, code=None, **kwargs):
         try:
             autoCopy = 1 if code else 0
             copy = code if code else f"{title}\n{msg}"
@@ -76,6 +76,7 @@ class Base(object):
             }
             unneedkeys = ['name_mark', 'filters', 'server_url', 'template']
             bark_body.update({key: dest[key] for key in dest if key not in unneedkeys})
+            bark_body.update(kwargs)
             self.logging.info(f"Sending to bark dest: {dest.get('name_mark', '')}")
             bark_res = requests.post(bark_url, json=bark_body)
             if bark_res.status_code != 200:
