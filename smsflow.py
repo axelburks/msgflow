@@ -16,7 +16,7 @@ CONFIG_DEFAULTS = {
         },
     },
     "alarm": {
-        "strategy": "all",
+        "strategy": "until_success",
         "template": {
             "title": "{{source}}: {{error}}",
             "body": "{{msg}}\n\n{{traceback}}",
@@ -46,10 +46,10 @@ CONFIG_SUPPORTED = {
         "alarm_keys": {"title", "body"},
     },
     "channels": {
-        "bark": {"required_keys": {"server_url"}},
-        "pushgo": {"required_keys": {"server_url"}},
-        "tgbot": {"required_keys": {"server_url", "chat_id"}},
-        "lark": {"required_keys": {"server_url"}},
+        "bark": {"required_keys": {"url"}},
+        "pushgo": {"required_keys": {"url"}},
+        "tgbot": {"required_keys": {"url", "chat_id"}},
+        "lark": {"required_keys": {"url"}},
     },
 }
 

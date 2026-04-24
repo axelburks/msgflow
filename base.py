@@ -98,7 +98,7 @@ class Base(object):
             autoCopy = 1 if code else 0
             copy = code if code else f"{title}\n{body}"
             level = 'timeSensitive' if code else 'active'
-            bark_url = dest['server_url']
+            bark_url = dest['url']
             bark_body = {
                 "title": title,
                 "body": body,
@@ -106,7 +106,7 @@ class Base(object):
                 "autoCopy": autoCopy,
                 "copy": copy,
             }
-            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
+            unneedkeys = ['name_mark', 'filters', 'url', 'template', 'target', 'channel']
             bark_body.update({key: dest[key] for key in dest if key not in unneedkeys})
             self.logging.debug(f"{dest_mark} body: {json.dumps(bark_body, ensure_ascii=False)}")
             bark_res = requests.post(bark_url, json=bark_body)
@@ -124,12 +124,12 @@ class Base(object):
         try:
             
             self.logging.info(f"{dest_mark}")
-            pushgo_url = dest['server_url']
+            pushgo_url = dest['url']
             pushgo_body = {
                 "title": title,
                 "body": body,
             }
-            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
+            unneedkeys = ['name_mark', 'filters', 'url', 'template', 'target', 'channel']
             pushgo_body.update({key: dest[key] for key in dest if key not in unneedkeys})
             self.logging.debug(f"{dest_mark} body: {json.dumps(pushgo_body, ensure_ascii=False)}")
             pushgo_res = requests.post(pushgo_url, json=pushgo_body)
@@ -146,7 +146,7 @@ class Base(object):
         dest_mark = f"🤖 {dest.get('name_mark')}({dest.get('channel')})"
         try:
             self.logging.info(f"{dest_mark}")
-            tgbot_url = dest['server_url']
+            tgbot_url = dest['url']
             title = html.escape(title)
             body = html.escape(body)
             title = title.replace(code, f"<code>{code}</code>") if code else title
@@ -155,7 +155,7 @@ class Base(object):
                 "text": f"{title}\n{body}",
                 "parse_mode": "HTML",
             }
-            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
+            unneedkeys = ['name_mark', 'filters', 'url', 'template', 'target', 'channel']
             tgbot_body.update({key: dest[key] for key in dest if key not in unneedkeys})            
             self.logging.debug(f"{dest_mark} body: {json.dumps(tgbot_body, ensure_ascii=False)}")
             tgbot_res = requests.post(tgbot_url, json=tgbot_body)
@@ -173,7 +173,7 @@ class Base(object):
         dest_mark = f"📘 {dest.get('name_mark')}({dest.get('channel')})"
         try:
             self.logging.info(f"{dest_mark}")
-            lark_url = dest['server_url']
+            lark_url = dest['url']
             lark_normal_body = {
                 "msg_type": "interactive",
                 "card": {
@@ -234,7 +234,7 @@ class Base(object):
                 ]
             }
             lark_body = lark_code_body if code else lark_normal_body
-            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
+            unneedkeys = ['name_mark', 'filters', 'url', 'template', 'target', 'channel']
             lark_body.update({key: dest[key] for key in dest if key not in unneedkeys})
             self.logging.debug(f"{dest_mark} body: {json.dumps(lark_body, ensure_ascii=False)}")
             lark_res = requests.post(lark_url, json=lark_body)
