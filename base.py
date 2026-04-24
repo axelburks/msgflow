@@ -40,9 +40,17 @@ class Base(object):
 
     def __init__(self):
         self.logging = logging.getLogger(__name__)
+
+    def _format_http_response_text(self, res):
+        try:
+            data = res.json()
+            return json.dumps(data, ensure_ascii=False)
+        except Exception:
+            text = res.text
+            return text
         
     def get_code_from_msg(self, msg):
-        msg_code = None
+        code = None
         if not msg:
             return None
         
@@ -57,60 +65,169 @@ class Base(object):
         if match_flags and matches_captchas:
             flag_index = msg_escaped.find(match_flags.group())
             closest_captcha = min(matches_captchas, key=lambda x: abs(msg_escaped.find(x[1]) - flag_index))[1]
-            msg_code = closest_captcha
+            code = closest_captcha
         
-        return msg_code
+        return code
 
-    def notify_to_bark(self, dest, title, msg, code=None, **kwargs):
+    def notify_to_bark(self, dest, title, body, code=None):
+        dest_mark = f"📣 {dest.get('name_mark')}({dest.get('channel')})"
         try:
+            self.logging.info(f"{dest_mark}")
             autoCopy = 1 if code else 0
-            copy = code if code else f"{title}\n{msg}"
+            copy = code if code else f"{title}\n{body}"
             level = 'timeSensitive' if code else 'active'
             bark_url = dest['server_url']
             bark_body = {
                 "title": title,
-                "body": msg,
+                "body": body,
                 "level": level,
                 "autoCopy": autoCopy,
                 "copy": copy,
             }
-            unneedkeys = ['name_mark', 'filters', 'server_url', 'template']
+            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
             bark_body.update({key: dest[key] for key in dest if key not in unneedkeys})
-            bark_body.update(kwargs)
-            self.logging.info(f"Sending to bark dest: {dest.get('name_mark', '')}")
+            self.logging.debug(f"{dest_mark} body: {json.dumps(bark_body, ensure_ascii=False)}")
             bark_res = requests.post(bark_url, json=bark_body)
+            formatted_res_text = self._format_http_response_text(bark_res)
+            self.logging.debug(f"{dest_mark} response: {formatted_res_text}")
             if bark_res.status_code != 200:
-                return False, f"Bark API Error: {bark_res.text}"
-            else:
-                return True, bark_res.text
+                return False, f"{dest_mark} error: {formatted_res_text}"
+            return True, formatted_res_text
         except Exception as e:
-            return False, str(e)
-            
-    def notify_to_tgbot(self, dest, title, msg, code=None):
+            return False, f"{dest_mark} error: {e}"
+        
+    def notify_to_pushgo(self, dest, title, body, code=None):
+        dest_mark = f"⚡ {dest.get('name_mark')}({dest.get('channel')})"
         try:
+            
+            self.logging.info(f"{dest_mark}")
+            pushgo_url = dest['server_url']
+            pushgo_body = {
+                "title": title,
+                "body": body,
+            }
+            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
+            pushgo_body.update({key: dest[key] for key in dest if key not in unneedkeys})
+            self.logging.debug(f"{dest_mark} body: {json.dumps(pushgo_body, ensure_ascii=False)}")
+            pushgo_res = requests.post(pushgo_url, json=pushgo_body)
+            formatted_res_text = self._format_http_response_text(pushgo_res)
+            self.logging.debug(f"{dest_mark} response: {formatted_res_text}")
+            if pushgo_res.status_code != 200:
+                return False, f"{dest_mark} error: {formatted_res_text}"
+            return True, formatted_res_text
+        except Exception as e:
+            return False, f"{dest_mark} error: {e}"
+        
+    def notify_to_tgbot(self, dest, title, body, code=None):
+        dest_mark = f"🤖 {dest.get('name_mark')}({dest.get('channel')})"
+        try:
+            self.logging.info(f"{dest_mark}")
             tgbot_url = dest['server_url']
             title = html.escape(title)
-            msg = html.escape(msg)
+            body = html.escape(body)
             title = title.replace(code, f"<code>{code}</code>") if code else title
-            msg = msg.replace(code, f"<code>{code}</code>") if code else msg
+            body = body.replace(code, f"<code>{code}</code>") if code else body
             tgbot_body = {
-                "text": f"{title}\n{msg}",
+                "text": f"{title}\n{body}",
                 "parse_mode": "HTML",
             }
-            unneedkeys = ['name_mark', 'filters', 'server_url', 'template']
+            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
             tgbot_body.update({key: dest[key] for key in dest if key not in unneedkeys})            
-            self.logging.info(f"Sending to tgbot dest: {dest.get('name_mark', '')}")
+            self.logging.debug(f"{dest_mark} body: {json.dumps(tgbot_body, ensure_ascii=False)}")
             tgbot_res = requests.post(tgbot_url, json=tgbot_body)
+            formatted_res_text = self._format_http_response_text(tgbot_res)
+            self.logging.debug(f"{dest_mark} response: {formatted_res_text}")
             if tgbot_res.status_code != 200:
-                return False, f"Telegram API Error: {tgbot_res.text}"
+                return False, f"{dest_mark} error: {formatted_res_text}"
             else:
-                return True, tgbot_res.text
+                return True, formatted_res_text
         except Exception as e:
-            return False, str(e)
+            return False, f"{dest_mark} error: {e}"
 
-    def notification(self, title, msg):
+    def notify_to_lark(self, dest, title, body, code=None):
+        dest_mark = f"📘 {dest.get('name_mark')}({dest.get('channel')})"
+        try:
+            self.logging.info(f"{dest_mark}")
+            lark_url = dest['server_url']
+            lark_normal_body = {
+                "msg_type": "interactive",
+                "card": {
+                    "header": {
+                        "template": "green",
+                        "title": {
+                            "content": title,
+                            "tag": "plain_text"
+                        }
+                    },
+                    "elements": [
+                        {
+                            "tag": "div",
+                            "text": {
+                                "content": body,
+                                "tag": "lark_md"
+                            }
+                        }
+                    ]
+                }
+            }
+            lark_code_body = {
+                "header": {
+                    "template": "blue",
+                    "title": {
+                        "content": title,
+                        "tag": "plain_text"
+                    }
+                },
+                "elements": [
+                    {
+                        "tag": "column_set",
+                        "flex_mode": "none",
+                        "background_style": "grey",
+                        "horizontal_spacing": "default",
+                        "columns": [
+                            {
+                                "tag": "column",
+                                "width": "weighted",
+                                "weight": 1,
+                                "elements": [
+                                    {
+                                        "tag": "markdown",
+                                        "text_align": "center",
+                                        "content": f"验证码\n{code}\n"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "tag": "div",
+                        "text": {
+                            "content": body,
+                            "tag": "lark_md"
+                        }
+                    }
+                ]
+            }
+            lark_body = lark_code_body if code else lark_normal_body
+            unneedkeys = ['name_mark', 'filters', 'server_url', 'template', 'target', 'channel']
+            lark_body.update({key: dest[key] for key in dest if key not in unneedkeys})
+            self.logging.debug(f"{dest_mark} body: {json.dumps(lark_body, ensure_ascii=False)}")
+            lark_res = requests.post(lark_url, json=lark_body)
+            formatted_res_text = self._format_http_response_text(lark_res)
+            self.logging.debug(f"{dest_mark} response: {formatted_res_text}")
+            if lark_res.status_code != 200:
+                return False, f"{dest_mark} error: {formatted_res_text}"
+            else:
+                lark_res_json = lark_res.json()
+                if lark_res_json.get('code') != 0:
+                    return False, f"{dest_mark} error: {formatted_res_text}"
+            return True, formatted_res_text
+        except Exception as e:
+            return False, f"{dest_mark} error: {e}"
+    
+    def notification(self, title, body):
         subprocess.run([
-            'osascript', '-e', f'display notification "{msg}" with title "{title}"'
+            'osascript', '-e', f'display notification "{body}" with title "{title}"'
         ], check=True)
 
     def save_to_clipboard(self, code):

@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "msgflow-debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/msgflow.py",
+      "args": [
+        "-d",
+      ],
+    },
+    {
+      "name": "msgflow-info",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/msgflow.py",
+      "args": [],
+    }
+  ]
+}

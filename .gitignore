@@ -1,7 +1,6 @@
 *test*
 *.pyc
 *.spec
-.vscode/*
 .eggs/*
 __pycache__/*
 build*/*
