@@ -36,11 +36,32 @@ class Config:
     def user_config(self):
         return self._user_config
 
+def channel(name: str):
+    def decorator(fn):
+        fn._msgflow_channel = name
+        return fn
+    return decorator
+
 class Base(object):
 
     def __init__(self):
         self.logging = logging.getLogger(__name__)
+        self.channel_notifiers = self._build_channel_notifiers()
 
+    def _build_channel_notifiers(self):
+        channel_notifiers = {}
+        for attr in dir(self):
+            fn = getattr(self, attr, None)
+            if not callable(fn):
+                continue
+            channel_name = getattr(fn, '_msgflow_channel', None)
+            if not channel_name:
+                continue
+            if channel_name in channel_notifiers:
+                raise Exception(f"duplicate channel notifier for '{channel_name}'")
+            channel_notifiers[channel_name] = fn
+        return channel_notifiers
+    
     def _format_http_response_text(self, res):
         try:
             data = res.json()
@@ -69,6 +90,7 @@ class Base(object):
         
         return code
 
+    @channel('bark')
     def notify_to_bark(self, dest, title, body, code=None):
         dest_mark = f"📣 {dest.get('name_mark')}({dest.get('channel')})"
         try:
@@ -96,8 +118,9 @@ class Base(object):
         except Exception as e:
             return False, f"{dest_mark} error: {e}"
         
+    @channel('pushgo')
     def notify_to_pushgo(self, dest, title, body, code=None):
-        dest_mark = f"⚡ {dest.get('name_mark')}({dest.get('channel')})"
+        dest_mark = f"🌸 {dest.get('name_mark')}({dest.get('channel')})"
         try:
             
             self.logging.info(f"{dest_mark}")
@@ -118,6 +141,7 @@ class Base(object):
         except Exception as e:
             return False, f"{dest_mark} error: {e}"
         
+    @channel('tgbot')
     def notify_to_tgbot(self, dest, title, body, code=None):
         dest_mark = f"🤖 {dest.get('name_mark')}({dest.get('channel')})"
         try:
@@ -144,6 +168,7 @@ class Base(object):
         except Exception as e:
             return False, f"{dest_mark} error: {e}"
 
+    @channel('lark')
     def notify_to_lark(self, dest, title, body, code=None):
         dest_mark = f"📘 {dest.get('name_mark')}({dest.get('channel')})"
         try:
@@ -153,7 +178,7 @@ class Base(object):
                 "msg_type": "interactive",
                 "card": {
                     "header": {
-                        "template": "green",
+                        "template": "blue",
                         "title": {
                             "content": title,
                             "tag": "plain_text"
@@ -172,7 +197,7 @@ class Base(object):
             }
             lark_code_body = {
                 "header": {
-                    "template": "blue",
+                    "template": "green",
                     "title": {
                         "content": title,
                         "tag": "plain_text"
