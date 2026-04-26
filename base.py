@@ -186,10 +186,29 @@ class Base(object):
     def notify_to_lark(self, dest):
         return self.notify_to_webhook(dest)
     
-    def notification(self, title, body):
-        subprocess.run([
-            'osascript', '-e', f'display notification "{body}" with title "{title}"'
-        ], check=True)
+    @channel('notification')
+    def notification(self, dest):
+        logmarker = dest.get('logmarker')
+        dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
+        self.logging.info(f"{dest_mark}")
+        title = dest.get('title')
+        body = dest.get('body')
+        try:
+            result = subprocess.run(
+                [
+                    'osascript',
+                    '-e',
+                    f'display notification "{body}" with title "{title}"'
+                ],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            if dest.get('autoCopy') == 1 and dest.get('copy'):
+                self.save_to_clipboard(dest.get('copy'))
+            return True, result.stdout
+        except Exception as e:
+            return False, f"{dest_mark} error: {e}"
 
     def save_to_clipboard(self, code):
         pyperclip.copy(str(code))

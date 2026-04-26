@@ -93,6 +93,29 @@ CONFIG_DEFAULTS = {
             "success_json": {
                 "code": 0,
             }
+        },
+        "notification": {
+            "logmarker": "🔔",
+            "title": {
+                "$default": "{{receiver}} <- {{sender}}",
+                "$code": "🌀 {{code}}",
+                "$alarm": "{{source}}: {{error}}",
+            },
+            "body": {
+                "$default": "{{text}}\n{{source}} - {{receive_time}}",
+                "$code": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{receive_time}}",
+                "$alarm": "{{msg}}\n\n{{traceback}}"
+            },
+            "copy": {
+                "$default": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{receive_time}}",
+                "$code": "{{code}}",
+                "$alarm": "{{source}}: {{error}}\n\n{{msg}}\n\n{{traceback}}",
+            },
+            "autoCopy": {
+                "$default": 0,
+                "$code": 1,
+                "$alarm": 0
+            }
         }
     }
 }
@@ -241,6 +264,9 @@ class SMSFlow(Base):
         init_timestamp = int(time.time())
         for dest in self.forward_destinations:
             dest_name = dest['name_mark']
+            if dest.get('channel') == 'notification':
+                self.update_time[dest_name] = init_timestamp
+                continue
             if saved_update_time and dest_name in saved_update_time:
                 saved_value = saved_update_time[dest_name]
                 parsed = _parse_time_str(saved_value)
@@ -251,7 +277,6 @@ class SMSFlow(Base):
                 self.update_time[dest_name] = parsed
             else:
                 self.update_time[dest_name] = init_timestamp
-        self.update_time['notify_time'] = init_timestamp
         self.min_update_time = min(self.update_time.values())
         self.last_new_msg_time = init_timestamp
     
@@ -553,12 +578,6 @@ class SMSFlow(Base):
                     # get code from message
                     msg['code'] = self.get_code_from_text(msg.get('text'))
                     self.logging.info(f"✉️  message: {json.dumps(msg, ensure_ascii=False)}")
-                    # notify message
-                    if msg['timestamp'] > self.update_time['notify_time']:
-                        self.update_time['notify_time'] = msg['timestamp']
-                        if msg.get('code'):
-                            self.notification(msg['code'], msg['text'])
-                            self.save_to_clipboard(msg['code'])
                     # forward messagge
                     self.forward_message(msg)
                 except Exception as e:
