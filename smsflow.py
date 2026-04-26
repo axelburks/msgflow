@@ -8,7 +8,7 @@ message_db_file_path = os.path.expanduser('~/Library/Messages/chat.db')
 
 CONFIG_DEFAULTS = {
     "forward": {
-        "strategy": "all",
+        "strategy": "until_success",
     },
     "alarm": {
         "strategy": "until_success",
@@ -246,7 +246,8 @@ class SMSFlow(Base):
         self.target_opt = self.root_opt.get('target', {})
         self.fwd_opt = self.root_opt.get('forward', {})
         self.alarm_opt = self.root_opt.get('alarm', {})
-        self.forward_destinations = self._build_forward_destinations()
+        self.forward_rules = self._build_forward_rules()
+        self.forward_destinations = self._flatten_forward_destinations()
         self.alarm_destinations = self._build_alarm_destinations()
         self.is_1st_start = True
         self.update_time = {}
@@ -417,20 +418,54 @@ class SMSFlow(Base):
         built = []
         name_marks = set()
         for dest in destinations:
-            payload = self._resolve_destination(dest)
-            name_mark = payload['name_mark']
+            dest_merged = self._resolve_destination(dest)
+            name_mark = dest_merged['name_mark']
             if name_mark in name_marks:
                 raise Exception(f"duplicate destination name_mark '{name_mark}'")
             name_marks.add(name_mark)
-            built.append(payload)
+            built.append(dest_merged)
         return built
 
-    def _build_forward_destinations(self):
-        destinations = self.fwd_opt.get('destinations') or []
-        try:
-            return self._build_destinations(destinations)
-        except Exception as e:
-            raise Exception(f"build_forward_destinations error: {e}")
+    def _build_rule_destinations(self, rule_name_mark, destinations):
+        built = []
+        name_marks = set()
+        for dest in destinations:
+            dest_merged = self._resolve_destination(dest)
+            name_mark = f"{rule_name_mark}_{dest_merged['name_mark']}"
+            dest_merged["name_mark"] = name_mark
+            if name_mark in name_marks:
+                raise Exception(f"duplicate destination name_mark '{name_mark}'")
+            name_marks.add(name_mark)
+            built.append(dest_merged)
+        return built
+
+    def _build_forward_rules(self):
+        rules = self.fwd_opt.get('rules') or []
+        built_rules = []
+        for idx, rule in enumerate(rules):
+            rule_name_mark = rule.get("name_mark") or f"rule_{idx}"
+            filters = rule.get("filters") or []
+            destinations = rule.get("destinations") or []
+            try:
+                built_dests = self._build_rule_destinations(rule_name_mark, destinations)
+            except Exception as e:
+                raise Exception(f"build_forward_rules error: rule[{idx}] '{rule_name_mark}' destinations: {e}")
+
+            built_rules.append(
+                {
+                    "name_mark": rule_name_mark,
+                    "filters": filters,
+                    "strategy": rule.get("strategy") or CONFIG_DEFAULTS["forward"]["strategy"],
+                    "destinations": built_dests,
+                }
+            )
+        return built_rules
+
+    def _flatten_forward_destinations(self):
+        flat = []
+        for rule in self.forward_rules:
+            flat.extend(rule.get("destinations") or [])
+        return flat
 
     def _build_alarm_destinations(self):
         destinations = self.alarm_opt.get('destinations') or []
@@ -495,69 +530,77 @@ class SMSFlow(Base):
             self.logging.info(f"{'>' * 15} ⚠️ alarm end {'<' * 15}")
 
     def forward_message(self, msg):
-        strategy = self.fwd_opt.get('strategy') or CONFIG_DEFAULTS["forward"]["strategy"]
+        msg_ts = msg.get("timestamp")
+        overall_ok = True
+        for rule in self.forward_rules:
+            rule_name = rule.get("name_mark")
+            rule_filters = rule.get("filters")
+            rule_strategy = rule.get("strategy")
+            rule_dests = rule.get("destinations")
+            self.logging.debug(f"📏 {rule_name}({rule_strategy})")
 
-        attempted = 0
-        any_success = False
-        any_failed = False
-        errors = []
-        for idx, dest in enumerate(self.forward_destinations):
-            dest_name = dest['name_mark']
-            dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
-            msg_ts = msg.get('timestamp')
-            last_ts = self.update_time.get(dest_name, 0)
-            ts_passed = msg_ts > last_ts
-            self.logging.debug(
-                f"{dest_mark} ts "
-                f"{'[√]' if ts_passed else '[x]'}: "
-                f"{_format_ts(msg_ts)} {'>' if ts_passed else '<='} {_format_ts(last_ts)}"
-                f" ({msg_ts} {'>' if ts_passed else '<='} {last_ts})"
-            )
-            if not ts_passed:
-                continue
-            if not self.check_filters(msg, dest.get('filters')):
-                self.update_time[dest_name] = msg.get('timestamp')
+            if not self.check_filters(msg, rule_filters):
+                for dest in rule_dests:
+                    dest_name = dest["name_mark"]
+                    if msg_ts > self.update_time.get(dest_name, 0):
+                        self.update_time[dest_name] = msg_ts
                 continue
 
-            rendered_dest = self._render_destination(dest, msg, False)
-            cur_status, cur_res = self._send_to_destination(rendered_dest)
+            attempted = 0
+            any_success = False
+            any_failed = False
+            errors = []
 
-            attempted += 1
-            if cur_status:
-                any_success = True
-                self.update_time[dest_name] = msg.get('timestamp')
-                if strategy == 'until_success':
-                    for remaining in self.forward_destinations[idx + 1:]:
-                        r_name = remaining['name_mark']
-                        if msg.get('timestamp') > self.update_time.get(r_name, 0):
-                            self.update_time[r_name] = msg.get('timestamp')
-                    return True
-            else:
-                any_failed = True
-                self.logging.error(f"❌ forward failed: {cur_res}")
-                errors.append(f"{dest_name}: {cur_res}")
-
-        if strategy == 'all':
-            if attempted == 0:
-                return True
-            if any_failed:
-                self.send_alarm(
-                    msg,
-                    error="some forward destinations failed under all strategy",
-                    traceback="\n\n".join(errors) if errors else None,
+            for idx, dest in enumerate(rule_dests):
+                dest_name = dest["name_mark"]
+                dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
+                last_ts = self.update_time.get(dest_name, 0)
+                ts_passed = msg_ts > last_ts
+                self.logging.debug(
+                    f"{dest_mark} ts "
+                    f"{'[√]' if ts_passed else '[x]'}: "
+                    f"{_format_ts(msg_ts)} {'>' if ts_passed else '<='} {_format_ts(last_ts)}"
+                    f" ({msg_ts} {'>' if ts_passed else '<='} {last_ts})"
                 )
-                return False
-            return True
+                if not ts_passed:
+                    continue
 
-        if attempted == 0:
-            return True
-        if attempted > 0 and not any_success:
-            self.send_alarm(
-                msg,
-                error="all destinations failed under until_success strategy",
-                traceback="\n\n".join(errors) if errors else None,
-            )
-        return any_success
+                rendered_dest = self._render_destination(dest, msg, is_alarm=False)
+                cur_status, cur_res = self._send_to_destination(rendered_dest)
+
+                attempted += 1
+                if cur_status:
+                    any_success = True
+                    self.update_time[dest_name] = msg_ts
+                    if rule_strategy == "until_success":
+                        for remaining in rule_dests[idx + 1:]:
+                            r_name = remaining["name_mark"]
+                            if msg_ts > self.update_time.get(r_name, 0):
+                                self.update_time[r_name] = msg_ts
+                        break
+                else:
+                    any_failed = True
+                    self.logging.error(f"❌ forward failed: {cur_res}")
+                    errors.append(f"{cur_res}")
+
+            if rule_strategy == "all":
+                if attempted > 0 and any_failed:
+                    overall_ok = False
+                    self.send_alarm(
+                        msg,
+                        error=f"some forward destinations failed under {rule_strategy} strategy",
+                        traceback="\n\n".join(errors) if errors else None,
+                    )
+            else:
+                if attempted > 0 and (not any_success):
+                    overall_ok = False
+                    self.send_alarm(
+                        msg,
+                        error=f"all destinations failed under {rule_strategy} strategy",
+                        traceback="\n\n".join(errors) if errors else None,
+                    )
+
+        return overall_ok
     
     def check2notify(self, mock: bool = False, mock_msgs: list = []):
         self.min_update_time = min(self.update_time.values())
