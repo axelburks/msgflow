@@ -47,8 +47,7 @@ if __name__ == '__main__':
         config.debug_mode = True
     
     logging.basicConfig(level = log_level, 
-                        format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                        format = '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s')
 
     app = MSGFLOW()
     app.run()
-

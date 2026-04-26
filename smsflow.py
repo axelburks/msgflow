@@ -251,6 +251,7 @@ class SMSFlow(Base):
         self.update_time['notify_time'] = init_timestamp
         self.min_update_time = min(self.update_time.values())
         self.last_new_msg_time = init_timestamp
+        self.notify_start_listening()
         
     def _supported_forward_template_vars(self):
         return set(self._build_tmpl_mapping({}).keys())
@@ -302,11 +303,9 @@ class SMSFlow(Base):
             if not row.get('text'):
                 if row.get('attributedBody'):
                     row['text'] = self.get_msg_from_applearchive(row.get('attributedBody'))
-                    row['attributedBody'] = ''
                 else:
                     data.remove(row)
-            else:
-                row['attributedBody'] = ''
+            row.pop('attributedBody', None)
         return data
     
     def is_filter_matched(self, msg, match, match_type):
@@ -323,8 +322,15 @@ class SMSFlow(Base):
         
     def check_filters(self, msg, filters):
         if filters:
-            return all(self.is_filter_matched(msg, f['match'], f['type']) for f in filters)
+            for f in filters:
+                if not self.is_filter_matched(msg, f['match'], f['type']):
+                    self.logging.debug(f"🕸️  filter [x]: {json.dumps(f, ensure_ascii=False, default=str)}")
+                    return False
+                else:
+                    self.logging.debug(f"🕸️  filter [√]: {json.dumps(f, ensure_ascii=False, default=str)}")
+            return True
         else:
+            self.logging.debug(f"🕸️ no filters")
             return True
     
     def _resolve_destination(self, destination):
@@ -383,7 +389,7 @@ class SMSFlow(Base):
             mapping[key] = value
         return mapping
     
-    def _render_destination(self, dest, msg, is_alarm, **kwargs):
+    def _render_destination(self, dest: dict, msg: dict = {}, is_alarm: bool = False, **kwargs):
         mapping = self._build_tmpl_mapping(msg, **kwargs)
         rendered_dest = copy.deepcopy(dest)
         rendered_dest["code"] = msg.get("code")
@@ -398,7 +404,8 @@ class SMSFlow(Base):
     def send_alarm(self, msg: dict = {}, **kwargs) -> bool:
         if not self.alarm_destinations:
             return False
-        self.logging.info(f"{'#' * 15} ⚠️ alarm starting {'#' * 15}")
+        print("")
+        self.logging.info(f"{'>' * 15} ⚠️ alarm start {'<' * 15}")
         try:
             strategy = self.alarm_opt.get('strategy') or CONFIG_DEFAULTS["alarm"]["strategy"]
 
@@ -418,7 +425,7 @@ class SMSFlow(Base):
                 return not any_failed
             return any_success
         finally:
-            self.logging.info(f"{'#' * 15} ⚠️ alarm finished {'#' * 15}")
+            self.logging.info(f"{'>' * 15} ⚠️ alarm end {'<' * 15}")
 
     def forward_message(self, msg):
         strategy = self.fwd_opt.get('strategy') or CONFIG_DEFAULTS["forward"]["strategy"]
@@ -429,7 +436,17 @@ class SMSFlow(Base):
         errors = []
         for idx, dest in enumerate(self.forward_destinations):
             dest_name = dest['name_mark']
-            if msg.get('timestamp') <= self.update_time.get(dest_name, 0):
+            dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
+            msg_ts = msg.get('timestamp')
+            last_ts = self.update_time.get(dest_name, 0)
+            ts_passed = msg_ts > last_ts
+            self.logging.debug(
+                f"{dest_mark} ts "
+                f"{'[√]' if ts_passed else '[x]'}: "
+                f"{_format_ts(msg_ts)} {'>' if ts_passed else '<='} {_format_ts(last_ts)}"
+                f" ({msg_ts} {'>' if ts_passed else '<='} {last_ts})"
+            )
+            if not ts_passed:
                 continue
             if not self.check_filters(msg, dest.get('filters')):
                 self.update_time[dest_name] = msg.get('timestamp')
@@ -474,6 +491,22 @@ class SMSFlow(Base):
                 traceback="\n\n".join(errors) if errors else None,
             )
         return any_success
+
+    def notify_start_listening(self):
+        if not self.forward_destinations:
+            return True
+        for dest in self.forward_destinations:
+            try:
+                dest_name = dest.get("name_mark")
+                dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
+                rendered_dest = self._render_destination(dest, is_alarm=True, error="start listening...")
+                cur_status, cur_res = self._send_to_destination(rendered_dest)
+                if not cur_status:
+                    self.logging.error(f"❌ {dest_mark} error: {cur_res}")
+                    exit(1)
+            except Exception as e:
+                self.logging.error(f"❌ {dest_mark} error: {e}")
+                exit(1)
     
     def _check2notify(self):
         self.logging.debug('checking')
@@ -481,17 +514,18 @@ class SMSFlow(Base):
         self.logging.debug(f"update_time: { {k: f'{_format_ts(v)}({v})' for k, v in self.update_time.items()} }")
         self.logging.debug(f"min_update_time: {_format_ts(self.min_update_time)}({self.min_update_time})")
         c_timestamp = int(time.time())
-        
+
         new_msgs = self.query_new_messages()
         if new_msgs:
             self.last_new_msg_time = c_timestamp
             self.logging.info(json.dumps(new_msgs, ensure_ascii=False))
             for msg in new_msgs:
                 try:
-                    self.logging.info(f"{'#' * 15} 📩 new message {'#' * 15}")
-                    self.logging.info(f"✉️ new message: {json.dumps(msg, ensure_ascii=False)}")
+                    print("")
+                    self.logging.info(f"{'>' * 15} 📩 new message {'<' * 15}")
                     # get code from message
                     msg['code'] = self.get_code_from_text(msg.get('text'))
+                    self.logging.info(f"✉️ new message: {json.dumps(msg, ensure_ascii=False)}")
                     # notify message
                     if msg['timestamp'] > self.update_time['notify_time']:
                         self.update_time['notify_time'] = msg['timestamp']
@@ -505,7 +539,7 @@ class SMSFlow(Base):
                     self.send_alarm(msg=msg, error=str(e), traceback=traceback.format_exc())
                     continue
                 finally:
-                    self.logging.info(f"{'#' * 15} 📩 processed {'#' * 15}")
+                    self.logging.info(f"{'>' * 15} 📩 processed {'<' * 15}")
 
             # write forward time to file after all messages processed
             self.write_last_fwd_time_ro_file()
