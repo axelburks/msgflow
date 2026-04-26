@@ -11,6 +11,24 @@
       ],
     },
     {
+      "name": "msgflow-check",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/msgflow.py",
+      "args": [
+        "-c",
+      ],
+    },
+    {
+      "name": "msgflow-mock",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/msgflow.py",
+      "args": [
+        "-m",
+      ],
+    },
+    {
       "name": "msgflow-info",
       "type": "debugpy",
       "request": "launch",

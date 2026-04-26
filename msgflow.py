@@ -1,4 +1,4 @@
-import time, argparse, logging
+import time, argparse, logging, sys
 # from apscheduler.triggers.interval import IntervalTrigger
 # from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -13,7 +13,7 @@ class MSGFLOW(object):
         # self.scheduler = BackgroundScheduler()
         # self.app_scheduler = BackgroundScheduler()
         # self.email_list = []
-    
+
     def run(self):
         # trigger = IntervalTrigger(seconds=self.check_interval)
         # 
@@ -38,16 +38,30 @@ class MSGFLOW(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Running config for msgflow")
-    parser.add_argument('-d', '--debug', action='store_true', help='enable debug mode')
+    parser.add_argument('-d', '--debug', action='store_true', help='debug mode: with debug config')
+    parser.add_argument('-c', '--check', action='store_true', help='check mode: validate notification channels')
+    parser.add_argument('-m', '--mock', action='store_true', help='mock mode: simulate sms forwarding from sms/sms.json')
+    parser.add_argument('--count', type=int, default=2, help='number of sms messages to simulate')
     args = parser.parse_args()
 
     log_level = logging.INFO
-    if args.debug:
+
+    if args.debug or args.check or args.mock:
         log_level = logging.DEBUG
         config.debug_mode = True
     
-    logging.basicConfig(level = log_level, 
-                        format = '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s')
+    logging.basicConfig(
+        level = log_level, 
+        format = '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s'
+    )
 
+    if args.check:
+        SMSFlow().check_forward_destinations()
+        sys.exit(0)
+
+    if args.mock:
+        SMSFlow().mock2notify(args.count)
+        sys.exit(0)
+    
     app = MSGFLOW()
     app.run()

@@ -1,4 +1,4 @@
-import os, time, datetime, json, sqlite3, traceback, copy
+import os, sys, time, datetime, json, sqlite3, traceback, copy, random
 import regex, typedstream
 
 from base import config
@@ -226,9 +226,8 @@ class SMSFlow(Base):
         self.forward_destinations = self._build_forward_destinations()
         self.alarm_destinations = self._build_alarm_destinations()
         self.is_1st_start = True
-        init_timestamp = int(time.time())
-        saved_update_time = None
         self.update_time = {}
+        saved_update_time = None
         self.last_fwd_time_file = config.record_file_path
         if os.path.exists(self.last_fwd_time_file):
             with open(self.last_fwd_time_file, 'r') as fp:
@@ -236,6 +235,10 @@ class SMSFlow(Base):
                     saved_update_time = json.load(fp)
                 except Exception as e:
                     print(f"Reading last_fwd_time_file with error: {e}")
+        self.init_update_time(saved_update_time)
+
+    def init_update_time(self, saved_update_time: dict):
+        init_timestamp = int(time.time())
         for dest in self.forward_destinations:
             dest_name = dest['name_mark']
             if saved_update_time and dest_name in saved_update_time:
@@ -243,7 +246,7 @@ class SMSFlow(Base):
                 parsed = _parse_time_str(saved_value)
                 if parsed is None:
                     raise ValueError(
-                        f"{self.last_fwd_time_file} has invalid time format for '{dest_name}': {saved_value}"
+                        f"saved_update_time has invalid time format for '{dest_name}': {saved_value}"
                     )
                 self.update_time[dest_name] = parsed
             else:
@@ -251,16 +254,53 @@ class SMSFlow(Base):
         self.update_time['notify_time'] = init_timestamp
         self.min_update_time = min(self.update_time.values())
         self.last_new_msg_time = init_timestamp
-        self.notify_start_listening()
+    
+    def mock2notify(self, count): 
+        with open(os.path.expanduser(f"./sms/sms.json"), 'r') as f:
+            msgs_list = json.load(f)
+        if not isinstance(msgs_list, list):
+            raise ValueError(f"invalid sms.json format, expected list, got {type(msgs_list)}")
+        actual_count = min(len(msgs_list), count)
+        new_msgs = random.sample(msgs_list, actual_count)
+        self.init_update_time({})
+        for idx, msg in enumerate(new_msgs):
+            msg["timestamp"] = self.min_update_time + idx + 1
+            msg["time_str"] = _format_ts(msg["timestamp"])
         
+        try:
+            self.check2notify(mock=True, mock_msgs=new_msgs)
+        except Exception as e:
+            traceback.print_exc()
+            self.send_alarm(error=str(e), traceback=traceback.format_exc())
+
+    def check_forward_destinations(self):
+        if not self.forward_destinations:
+            self.logging.error("❌ no forward destinations, stop check")
+            sys.exit(1)
+        for dest in self.forward_destinations:
+            try:
+                dest_name = dest.get("name_mark")
+                dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
+                check_msg = f"{dest_mark} check passed"
+                rendered_dest = self._render_destination(dest, is_alarm=True, error=check_msg)
+                cur_status, cur_res = self._send_to_destination(rendered_dest)
+                if not cur_status:
+                    self.logging.error(f"❌ {dest_mark} error: {cur_res}")
+                    sys.exit(1)
+            except Exception as e:
+                self.logging.error(f"❌ {dest_mark} error: {e}")
+                sys.exit(1)
+    
     def _supported_forward_template_vars(self):
         return set(self._build_tmpl_mapping({}).keys())
 
     def _supported_alarm_template_vars(self):
         return self._supported_forward_template_vars() | {"error", "traceback"}
-
-    def write_last_fwd_time_ro_file(self):
+        
+    def write_last_fwd_time_ro_file(self, mock: bool = False):
         self.is_1st_start = False
+        if mock:
+            return
         with open(self.last_fwd_time_file, 'w') as f:
             json.dump({k: _format_ts(v) for k, v in self.update_time.items()}, f, indent=4)
     
@@ -491,31 +531,18 @@ class SMSFlow(Base):
                 traceback="\n\n".join(errors) if errors else None,
             )
         return any_success
-
-    def notify_start_listening(self):
-        if not self.forward_destinations:
-            return True
-        for dest in self.forward_destinations:
-            try:
-                dest_name = dest.get("name_mark")
-                dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
-                rendered_dest = self._render_destination(dest, is_alarm=True, error="start listening...")
-                cur_status, cur_res = self._send_to_destination(rendered_dest)
-                if not cur_status:
-                    self.logging.error(f"❌ {dest_mark} error: {cur_res}")
-                    exit(1)
-            except Exception as e:
-                self.logging.error(f"❌ {dest_mark} error: {e}")
-                exit(1)
     
-    def _check2notify(self):
-        self.logging.debug('checking')
+    def check2notify(self, mock: bool = False, mock_msgs: list = []):
         self.min_update_time = min(self.update_time.values())
         self.logging.debug(f"update_time: { {k: f'{_format_ts(v)}({v})' for k, v in self.update_time.items()} }")
         self.logging.debug(f"min_update_time: {_format_ts(self.min_update_time)}({self.min_update_time})")
         c_timestamp = int(time.time())
-
-        new_msgs = self.query_new_messages()
+        
+        if mock:
+            new_msgs = mock_msgs
+        else:
+            new_msgs = self.query_new_messages()
+        
         if new_msgs:
             self.last_new_msg_time = c_timestamp
             self.logging.info(json.dumps(new_msgs, ensure_ascii=False))
@@ -525,7 +552,7 @@ class SMSFlow(Base):
                     self.logging.info(f"{'>' * 15} 📩 new message {'<' * 15}")
                     # get code from message
                     msg['code'] = self.get_code_from_text(msg.get('text'))
-                    self.logging.info(f"✉️ new message: {json.dumps(msg, ensure_ascii=False)}")
+                    self.logging.info(f"✉️  message: {json.dumps(msg, ensure_ascii=False)}")
                     # notify message
                     if msg['timestamp'] > self.update_time['notify_time']:
                         self.update_time['notify_time'] = msg['timestamp']
@@ -542,16 +569,16 @@ class SMSFlow(Base):
                     self.logging.info(f"{'>' * 15} 📩 processed {'<' * 15}")
 
             # write forward time to file after all messages processed
-            self.write_last_fwd_time_ro_file()
+            self.write_last_fwd_time_ro_file(mock)
             
         # write forward time to file only when no message received for 10 minutes   
         elif c_timestamp - self.min_update_time > 60 * 10:
             self.update_time = {key: c_timestamp for key in self.update_time}
-            self.write_last_fwd_time_ro_file()
+            self.write_last_fwd_time_ro_file(mock)
             
         # write forward time to file when first start to avoid long time waiting
         elif self.is_1st_start:
-            self.write_last_fwd_time_ro_file()
+            self.write_last_fwd_time_ro_file(mock)
 
         # notify when no message received for every 24 hours
         if c_timestamp - self.last_new_msg_time > 60 * 60 * 24:
@@ -561,7 +588,7 @@ class SMSFlow(Base):
     
     def update_hook(self):
         try:
-            self._check2notify()
+            self.check2notify()
         except Exception as e:
             traceback.print_exc()
             self.send_alarm(error=str(e), traceback=traceback.format_exc())
