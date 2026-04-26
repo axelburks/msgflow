@@ -41,15 +41,13 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode: with debug config')
     parser.add_argument('-c', '--check', action='store_true', help='check mode: validate notification channels')
     parser.add_argument('-m', '--mock', action='store_true', help='mock mode: simulate sms forwarding from sms/sms.json')
-    parser.add_argument('--count', type=int, default=2, help='number of sms messages to simulate')
+    parser.add_argument('-n', '--num', type=int, default=2, help='number of sms messages to simulate')
     args = parser.parse_args()
 
     log_level = logging.INFO
-
-    if args.debug or args.check or args.mock:
+    if args.debug:
         log_level = logging.DEBUG
         config.debug_mode = True
-    
     logging.basicConfig(
         level = log_level, 
         format = '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s'
@@ -60,7 +58,7 @@ if __name__ == '__main__':
         sys.exit(0)
 
     if args.mock:
-        SMSFlow().mock2notify(args.count)
+        SMSFlow().mock2notify(args.num)
         sys.exit(0)
     
     app = MSGFLOW()

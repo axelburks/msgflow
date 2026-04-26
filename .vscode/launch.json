@@ -2,16 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "msgflow-debug",
+      "name": "normal",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/msgflow.py",
-      "args": [
-        "-d",
-      ],
+      "args": [],
     },
     {
-      "name": "msgflow-check",
+      "name": "check-normal",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/msgflow.py",
@@ -20,7 +18,7 @@
       ],
     },
     {
-      "name": "msgflow-mock",
+      "name": "mock-normal",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/msgflow.py",
@@ -29,11 +27,33 @@
       ],
     },
     {
-      "name": "msgflow-info",
+      "name": "debug",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/msgflow.py",
-      "args": [],
+      "args": [
+        "-d",
+      ],
+    },
+    {
+      "name": "check-debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/msgflow.py",
+      "args": [
+        "-c",
+        "-d",
+      ],
+    },
+    {
+      "name": "mock-debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/msgflow.py",
+      "args": [
+        "-m",
+        "-d",
+      ],
     }
   ]
 }

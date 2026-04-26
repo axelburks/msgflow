@@ -280,19 +280,21 @@ class SMSFlow(Base):
         self.min_update_time = min(self.update_time.values())
         self.last_new_msg_time = init_timestamp
     
-    def mock2notify(self, count): 
+    def mock2notify(self, num): 
         with open(os.path.expanduser(f"./sms/sms.json"), 'r') as f:
             msgs_list = json.load(f)
         if not isinstance(msgs_list, list):
             raise ValueError(f"invalid sms.json format, expected list, got {type(msgs_list)}")
-        actual_count = min(len(msgs_list), count)
-        new_msgs = random.sample(msgs_list, actual_count)
+        actual_num = min(len(msgs_list), num)
+        new_msgs = random.sample(msgs_list, actual_num)
         self.init_update_time({})
+
         for idx, msg in enumerate(new_msgs):
             msg["timestamp"] = self.min_update_time + idx + 1
             msg["time_str"] = _format_ts(msg["timestamp"])
         
         try:
+            self.send_alarm(error="mock starting")
             self.check2notify(mock=True, mock_msgs=new_msgs)
         except Exception as e:
             traceback.print_exc()
