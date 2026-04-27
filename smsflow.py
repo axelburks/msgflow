@@ -1,8 +1,8 @@
 import os, sys, time, datetime, json, sqlite3, traceback, copy, random
 import regex, typedstream
 
-from base import Base, deep_merge_dicts
-from config import config
+from base import Base
+import config
 
 message_db_file_path = os.path.expanduser('~/Library/Messages/chat.db')
 
@@ -114,21 +114,10 @@ class SMSFlow(Base):
     def __init__(self):
         super(SMSFlow, self).__init__()
         self.db = LiteDB(db_file=message_db_file_path)
-        self.cfg = config.effective_config
-        self.forward_rules = self._build_forward_rules()
-        self.forward_destinations = self._flatten_forward_destinations()
-        self.alarm_destinations = self._build_alarm_destinations()
-        self.built_cfg = deep_merge_dicts(
-            self.cfg,
-            {
-                "forward": {"rules": self.forward_rules},
-                "alarm": {"destinations": self.alarm_destinations},
-            },
-        )
         self.is_1st_start = True
         self.update_time = {}
         saved_update_time = None
-        self.last_fwd_time_file = config.record_file_path
+        self.last_fwd_time_file = config.getcfg().record_file_path
         if os.path.exists(self.last_fwd_time_file):
             with open(self.last_fwd_time_file, 'r') as fp:
                 try:
@@ -139,7 +128,7 @@ class SMSFlow(Base):
 
     def init_update_time(self, saved_update_time: dict):
         init_timestamp = int(time.time())
-        for dest in self.forward_destinations:
+        for dest in config.getcfg().forward_destinations:
             dest_name = dest['name_mark']
             if dest.get('channel') == 'notification':
                 self.update_time[dest_name] = init_timestamp
@@ -178,10 +167,7 @@ class SMSFlow(Base):
             self.send_alarm(error=str(e), traceback=traceback.format_exc())
 
     def check_forward_destinations(self):
-        if not self.forward_destinations:
-            self.logging.error("❌ no forward destinations, stop check")
-            sys.exit(1)
-        for dest in self.forward_destinations:
+        for dest in config.getcfg().forward_destinations:
             try:
                 dest_name = dest.get("name_mark")
                 dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
@@ -277,71 +263,6 @@ class SMSFlow(Base):
             self.logging.debug(f"🕸️ no filters")
             return True
     
-    def _resolve_destination(self, destination):
-        target_name = destination.get('target') or ''
-        user_target_cfg = (self.cfg.get('target') or {}).get(target_name) or {}
-        channel_name = user_target_cfg.get('channel') or destination.get('channel') or ''
-        channel_cfg = (self.cfg.get('channel') or {}).get(channel_name) or {}
-
-        merged = deep_merge_dicts(channel_cfg, user_target_cfg)
-        merged = deep_merge_dicts(merged, destination)
-        merged['name_mark'] = destination.get('name_mark') or target_name
-        return merged
-
-    def _build_destinations(self, destinations, name_mark_prefix: str = ""):
-        built = []
-        name_marks = set()
-        for dest in destinations:
-            dest_merged = self._resolve_destination(dest)
-            name_mark = dest_merged['name_mark']
-            if name_mark_prefix:
-                name_mark = f"{name_mark_prefix}_{name_mark}"
-                dest_merged["name_mark"] = name_mark
-            if name_mark in name_marks:
-                raise Exception(f"duplicate destination name_mark '{name_mark}'")
-            name_marks.add(name_mark)
-            built.append(dest_merged)
-        return built
-
-    def _build_forward_rules(self):
-        fwd_opt = self.cfg.get("forward")
-        fwd_strategy = fwd_opt.get("strategy")
-        rules = fwd_opt.get('rules') or []
-        built_rules = []
-        for idx, rule in enumerate(rules):
-            rule_name_mark = rule.get("name_mark") or f"rule_{idx}"
-            filters = rule.get("filters") or []
-            strategy = rule.get("strategy") or fwd_strategy
-            destinations = rule.get("destinations") or []
-            try:
-                built_dests = self._build_destinations(destinations, name_mark_prefix=rule_name_mark)
-            except Exception as e:
-                raise Exception(f"build_forward_rules error: rule[{idx}] '{rule_name_mark}' destinations: {e}")
-
-            built_rules.append(
-                {
-                    "name_mark": rule_name_mark,
-                    "filters": filters,
-                    "strategy": strategy,
-                    "destinations": built_dests,
-                }
-            )
-        return built_rules
-
-    def _flatten_forward_destinations(self):
-        flat = []
-        for rule in self.forward_rules:
-            flat.extend(rule.get("destinations") or [])
-        return flat
-
-    def _build_alarm_destinations(self):
-        alarm_opt = self.cfg.get("alarm") or {}
-        destinations = alarm_opt.get('destinations') or []
-        try:
-            return self._build_destinations(destinations)
-        except Exception as e:
-            raise Exception(f"build_alarm_destinations error: {e}")
-
     def _build_tmpl_mapping(self, msg, **kwargs):
         msg_str = json.dumps(msg, ensure_ascii=False, default=str) if msg else ''
         mapping = {
@@ -351,7 +272,7 @@ class SMSFlow(Base):
             "code": msg.get('code'),
             "receive_time": msg.get('time_str'),
             "msg": msg_str,
-            "source": self.built_cfg.get("source"),
+            "source": config.getcfg().built_cfg.get("source"),
         }
         for key, value in kwargs.items():
             if key in mapping and mapping[key] is not None:
@@ -372,10 +293,7 @@ class SMSFlow(Base):
         return notify(dest)
 
     def send_alarm(self, msg: dict = {}, **kwargs) -> bool:
-        alarm_cfg = self.built_cfg.get("alarm") or {}
-        alarm_destinations = alarm_cfg.get("destinations") or []
-        if not alarm_destinations:
-            return False
+        alarm_cfg = config.getcfg().built_cfg.get("alarm")
         print("")
         self.logging.info(f"{'>' * 15} ⚠️ alarm start {'<' * 15}")
         try:
@@ -383,7 +301,7 @@ class SMSFlow(Base):
 
             any_success = False
             any_failed = False
-            for dest in alarm_destinations:
+            for dest in alarm_cfg.get("destinations"):
                 rendered_dest = self._render_destination(dest, msg, is_alarm=True, **kwargs)
                 cur_status, cur_res = self._send_to_destination(rendered_dest)
                 if cur_status:
@@ -402,7 +320,7 @@ class SMSFlow(Base):
     def forward_message(self, msg):
         msg_ts = msg.get("timestamp")
         overall_ok = True
-        for rule in self.forward_rules:
+        for rule in config.getcfg().forward_rules:
             rule_name = rule.get("name_mark")
             rule_filters = rule.get("filters")
             rule_strategy = rule.get("strategy")
@@ -484,8 +402,9 @@ class SMSFlow(Base):
             new_msgs = self.query_new_messages()
         
         if new_msgs:
+            print("")
+            self.logging.info(json.dumps(new_msgs, ensure_ascii=False, default=str))
             self.last_new_msg_time = c_timestamp
-            self.logging.info(json.dumps(new_msgs, ensure_ascii=False))
             for msg in new_msgs:
                 try:
                     print("")

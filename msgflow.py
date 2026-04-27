@@ -2,14 +2,14 @@ import time, argparse, logging, sys
 # from apscheduler.triggers.interval import IntervalTrigger
 # from apscheduler.schedulers.background import BackgroundScheduler
 
-from config import config
+import config
 from smsflow import SMSFlow
 # from emailflow import EmailFlow
 
 
 class MSGFLOW(object):
     def __init__(self):
-        self.check_interval = config.user_config.get('check_interval') or 3
+        self.check_interval = config.cfg.built_cfg.get('check_interval')
         # self.scheduler = BackgroundScheduler()
         # self.app_scheduler = BackgroundScheduler()
         # self.email_list = []
@@ -44,14 +44,11 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--num', type=int, default=2, help='number of sms messages to simulate')
     args = parser.parse_args()
 
-    log_level = logging.INFO
-    if args.debug:
-        log_level = logging.DEBUG
-        config.debug_mode = True
     logging.basicConfig(
-        level = log_level, 
+        level = logging.DEBUG if args.debug else logging.INFO,
         format = '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s'
     )
+    config.cfg = config.Config(debug=args.debug)
 
     if args.check:
         SMSFlow().check_forward_destinations()
