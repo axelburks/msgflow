@@ -1,5 +1,5 @@
-import os
-import yaml
+import os, yaml, copy
+from base import deep_merge_dicts
 
 config_dir = '~/.config/msgflow'
 config_dir_debug = f"{config_dir}/debug"
@@ -7,6 +7,7 @@ config_file = 'config.yaml'
 record_file = 'record.json'
 
 CONFIG_DEFAULTS = {
+    "source": "msgflow",
     "forward": {
         "strategy": "until_success",
     },
@@ -130,7 +131,7 @@ class Config:
         self._config_file_path = os.path.expanduser(f"{config_dir}/{config_file}")
         self._record_file_path = os.path.expanduser(f"{config_dir}/{record_file}")
         with open(self._config_file_path, 'r') as fp:
-            self._user_config = yaml.safe_load(fp)
+            self._user_config = yaml.safe_load(fp) or {}
 
     @property
     def debug_mode(self):
@@ -150,7 +151,15 @@ class Config:
 
     @property
     def user_config(self):
-        return self._user_config
+        return self._user_config or {}
+
+    @property
+    def default_config(self):
+        return copy.deepcopy(CONFIG_DEFAULTS)
+
+    @property
+    def effective_config(self):
+        return deep_merge_dicts(self.default_config, self.user_config)
 
 
 config = Config()

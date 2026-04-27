@@ -1,6 +1,19 @@
 import os, logging, json, html, subprocess
 import requests, regex, pyperclip
 
+def deep_merge_dicts(low_priority, high_priority):
+    if not isinstance(low_priority, dict):
+        low_priority = {}
+    if not isinstance(high_priority, dict):
+        high_priority = {}
+    merged = dict(low_priority)
+    for key, value in high_priority.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
 def channel(name: str):
     def decorator(fn):
         fn._msgflow_channel = name
