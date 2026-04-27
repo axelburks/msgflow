@@ -2,7 +2,7 @@ import time, argparse, logging, sys
 # from apscheduler.triggers.interval import IntervalTrigger
 # from apscheduler.schedulers.background import BackgroundScheduler
 
-from base import config
+from config import config
 from smsflow import SMSFlow
 # from emailflow import EmailFlow
 
