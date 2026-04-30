@@ -48,7 +48,13 @@ if __name__ == '__main__':
         level = logging.DEBUG if args.debug else logging.INFO,
         format = '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s'
     )
-    config.cfg = config.Config(debug=args.debug)
+    try:
+        config.cfg = config.Config(debug=args.debug)
+    except Exception as e:
+        if args.debug:
+            raise
+        logging.error(str(e))
+        sys.exit(1)
 
     if args.check:
         SMSFlow().check_forward_destinations()

@@ -1,7 +1,7 @@
 import os, sys, time, datetime, json, sqlite3, traceback, copy, random
 import regex, typedstream
 
-from base import Base
+from base import Base, CHANNEL_NOTIFIERS, render_destination
 import config
 
 message_db_file_path = os.path.expanduser('~/Library/Messages/chat.db')
@@ -19,72 +19,6 @@ def _parse_time_str(time_str):
         return int(dt.timestamp())
     except Exception:
         return None
-
-def _render_template(template, mapping):
-    if not template:
-        return ''
-    mapping = mapping or {}
-    template_str = str(template)
-
-    def _repl(m):
-        key = str(m.group(1)).strip()
-        value = mapping.get(key)
-        return '' if value is None else str(value)
-
-    rendered = regex.sub(r"\{\{(\w+)\}\}", _repl, template_str)
-    rendered = rendered.rstrip()
-    if rendered.strip() == '':
-        rendered = ''
-    return rendered
-
-def _is_value_condition_dict(value):
-    if not isinstance(value, dict) or not value:
-        return False
-    allowed = {"$default", "$code", "$alarm"}
-    return all(k in allowed for k in value.keys())
-
-def _select_value_by_condition(value_dict, has_code, is_alarm):
-    if is_alarm and "$alarm" in value_dict:
-        return value_dict["$alarm"]
-    if has_code and "$code" in value_dict:
-        return value_dict["$code"]
-    if "$default" in value_dict:
-        return value_dict["$default"]
-    for _, v in value_dict.items():
-        return v
-    return None
-
-def _try_parse_json(value):
-    if not isinstance(value, str):
-        return None
-    try:
-        return json.loads(value)
-    except Exception:
-        return None
-
-def _render_value(value, mapping, has_code, is_alarm, key_name=None):
-    if _is_value_condition_dict(value):
-        chosen = _select_value_by_condition(value, has_code=has_code, is_alarm=is_alarm)
-        return _render_value(chosen, mapping, has_code=has_code, is_alarm=is_alarm, key_name=key_name)
-
-    if isinstance(value, dict):
-        rendered = {}
-        for k, v in value.items():
-            rendered[k] = _render_value(v, mapping, has_code=has_code, is_alarm=is_alarm, key_name=k)
-        return rendered
-
-    if isinstance(value, list):
-        return [_render_value(v, mapping, has_code=has_code, is_alarm=is_alarm, key_name=key_name) for v in value]
-
-    if isinstance(value, str):
-        if key_name == "payload":
-            parsed = _try_parse_json(value)
-            if isinstance(parsed, (dict, list)):
-                return _render_value(parsed, mapping, has_code=has_code, is_alarm=is_alarm, key_name=None)
-        return _render_template(value, mapping)
-
-    return value
-
 
 class LiteDB(object):
     def __init__(self, db_file):
@@ -117,7 +51,13 @@ class SMSFlow(Base):
         self.is_1st_start = True
         self.update_time = {}
         saved_update_time = None
-        self.last_fwd_time_file = config.getcfg().record_file_path
+        self.built_cfg = config.cfg.built_cfg
+        self.forward_rules = self.built_cfg['forward']['rules']
+        self.forward_destinations = self._flatten_forward_destinations()
+        self.alarm_strategy = self.built_cfg['alarm']['strategy']
+        self.alarm_destinations = self.built_cfg['alarm']['destinations']
+        self.source = self.built_cfg.get('source')
+        self.last_fwd_time_file = config.cfg.record_file_path
         if os.path.exists(self.last_fwd_time_file):
             with open(self.last_fwd_time_file, 'r') as fp:
                 try:
@@ -128,7 +68,7 @@ class SMSFlow(Base):
 
     def init_update_time(self, saved_update_time: dict):
         init_timestamp = int(time.time())
-        for dest in config.getcfg().forward_destinations:
+        for dest in self.forward_destinations:
             dest_name = dest['name_mark']
             if dest.get('channel') == 'notification':
                 self.update_time[dest_name] = init_timestamp
@@ -167,12 +107,13 @@ class SMSFlow(Base):
             self.send_alarm(error=str(e), traceback=traceback.format_exc())
 
     def check_forward_destinations(self):
-        for dest in config.getcfg().forward_destinations:
+        for dest in self.forward_destinations:
             try:
-                dest_name = dest.get("name_mark")
+                dest_name = dest.get('name_mark')
                 dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
-                check_msg = f"{dest_mark} check passed"
-                rendered_dest = self._render_destination(dest, is_alarm=True, error=check_msg)
+                check_title = f"{dest_mark} check passed"
+                check_msg = {"source": self.source}
+                rendered_dest = render_destination(dest, check_msg, is_alarm=True, error=check_title)
                 cur_status, cur_res = self._send_to_destination(rendered_dest)
                 if not cur_status:
                     self.logging.error(f"❌ {dest_mark} error: {cur_res}")
@@ -180,13 +121,7 @@ class SMSFlow(Base):
             except Exception as e:
                 self.logging.error(f"❌ {dest_mark} error: {e}")
                 sys.exit(1)
-    
-    def _supported_forward_template_vars(self):
-        return set(self._build_tmpl_mapping({}).keys())
 
-    def _supported_alarm_template_vars(self):
-        return self._supported_forward_template_vars() | {"error", "traceback"}
-        
     def write_last_fwd_time_ro_file(self, mock: bool = False):
         self.is_1st_start = False
         if mock:
@@ -229,7 +164,6 @@ class SMSFlow(Base):
         """
         data = self.db.select(sql.format(min_update_time=self.min_update_time))
         for row in data[:]:
-            row['time_str'] = _format_ts(row.get('timestamp', 0))
             if not row.get('text'):
                 if row.get('attributedBody'):
                     row['text'] = self.get_msg_from_applearchive(row.get('attributedBody'))
@@ -262,70 +196,50 @@ class SMSFlow(Base):
         else:
             self.logging.debug(f"🕸️ no filters")
             return True
-    
-    def _build_tmpl_mapping(self, msg, **kwargs):
-        msg_str = json.dumps(msg, ensure_ascii=False, default=str) if msg else ''
-        mapping = {
-            "sender": msg.get('sender'),
-            "receiver": msg.get('receiver'),
-            "text": msg.get('text'),
-            "code": msg.get('code'),
-            "receive_time": msg.get('time_str'),
-            "msg": msg_str,
-            "source": config.getcfg().built_cfg.get("source"),
-        }
-        for key, value in kwargs.items():
-            if key in mapping and mapping[key] is not None:
-                continue
-            mapping[key] = value
-        return mapping
-    
-    def _render_destination(self, dest: dict, msg: dict = {}, is_alarm: bool = False, **kwargs):
-        mapping = self._build_tmpl_mapping(msg, **kwargs)
-        rendered_dest = copy.deepcopy(dest)
-        rendered_dest["code"] = msg.get("code")
-        has_code = bool(msg.get("code"))
-        rendered_dest = _render_value(rendered_dest, mapping, has_code=has_code, is_alarm=is_alarm)
-        return rendered_dest
 
+    def _flatten_forward_destinations(self):
+        flat = []
+        for rule in self.forward_rules:
+            flat.extend(rule['destinations'])
+        return flat
+    
     def _send_to_destination(self, dest):
-        notify = self.channel_notifiers[dest["channel"]]
-        return notify(dest)
+        notify = CHANNEL_NOTIFIERS[dest["channel"]]
+        return notify(self, dest)
 
     def send_alarm(self, msg: dict = {}, **kwargs) -> bool:
-        alarm_cfg = config.getcfg().built_cfg.get("alarm")
-        print("")
-        self.logging.info(f"{'>' * 15} ⚠️ alarm start {'<' * 15}")
+        self.logging.info(f"{'#' * 15} ⚠️  alarm start {'#' * 15}")
         try:
-            strategy = alarm_cfg.get('strategy')
+            msg['source'] = self.source
 
             any_success = False
             any_failed = False
-            for dest in alarm_cfg.get("destinations"):
-                rendered_dest = self._render_destination(dest, msg, is_alarm=True, **kwargs)
+            for dest in self.alarm_destinations:
+                rendered_dest = render_destination(dest, msg, is_alarm=True, **kwargs)
                 cur_status, cur_res = self._send_to_destination(rendered_dest)
                 if cur_status:
                     any_success = True
-                    if strategy == 'until_success':
+                    if self.alarm_strategy == 'until_success':
                         return True
                 else:
                     any_failed = True
                     self.logging.error(f"❌ alarm failed: {cur_res}")
-            if strategy == 'all':
+            if self.alarm_strategy == 'all':
                 return not any_failed
             return any_success
         finally:
-            self.logging.info(f"{'>' * 15} ⚠️ alarm end {'<' * 15}")
+            self.logging.info(f"{'#' * 15} ⚠️  alarm end {'#' * 15}")
 
     def forward_message(self, msg):
-        msg_ts = msg.get("timestamp")
+        msg['source'] = self.source
+        msg_ts = msg.get('timestamp')
         overall_ok = True
-        for rule in config.getcfg().forward_rules:
-            rule_name = rule.get("name_mark")
-            rule_filters = rule.get("filters")
-            rule_strategy = rule.get("strategy")
-            rule_dests = rule.get("destinations")
-            self.logging.debug(f"📏 {rule_name}({rule_strategy})")
+        for rule in self.forward_rules:
+            rule_name = rule.get('name_mark')
+            rule_filters = rule.get('filters')
+            rule_strategy = rule.get('strategy')
+            rule_dests = rule.get('destinations')
+            self.logging.info(f"📏 {rule_name}({rule_strategy})")
 
             if not self.check_filters(msg, rule_filters):
                 for dest in rule_dests:
@@ -353,7 +267,7 @@ class SMSFlow(Base):
                 if not ts_passed:
                     continue
 
-                rendered_dest = self._render_destination(dest, msg, is_alarm=False)
+                rendered_dest = render_destination(dest, msg, is_alarm=False)
                 cur_status, cur_res = self._send_to_destination(rendered_dest)
 
                 attempted += 1
@@ -376,7 +290,7 @@ class SMSFlow(Base):
                     overall_ok = False
                     self.send_alarm(
                         msg,
-                        error=f"some forward destinations failed under {rule_strategy} strategy",
+                        error=f"({rule_strategy}) some forward destinations failed",
                         traceback="\n\n".join(errors) if errors else None,
                     )
             else:
@@ -384,7 +298,7 @@ class SMSFlow(Base):
                     overall_ok = False
                     self.send_alarm(
                         msg,
-                        error=f"all destinations failed under {rule_strategy} strategy",
+                        error=f"({rule_strategy}) all destinations failed",
                         traceback="\n\n".join(errors) if errors else None,
                     )
 
@@ -402,24 +316,24 @@ class SMSFlow(Base):
             new_msgs = self.query_new_messages()
         
         if new_msgs:
-            print("")
-            self.logging.info(json.dumps(new_msgs, ensure_ascii=False, default=str))
             self.last_new_msg_time = c_timestamp
             for msg in new_msgs:
                 try:
                     print("")
                     self.logging.info(f"{'>' * 15} 📩 new message {'<' * 15}")
-                    # get code from message
+                    msg['time_str'] = _format_ts(msg.get('timestamp', 0))
+                    self.logging.info(f"📨 {json.dumps(msg, ensure_ascii=False)}")
+                    msg['msg'] = json.dumps(msg, ensure_ascii=False, default=str)
                     msg['code'] = self.get_code_from_text(msg.get('text'))
-                    self.logging.info(f"✉️  message: {json.dumps(msg, ensure_ascii=False)}")
-                    # forward messagge
+                    if msg['code']:
+                        self.logging.info(f"🔐 {msg['code']}")
                     self.forward_message(msg)
                 except Exception as e:
                     traceback.print_exc()
                     self.send_alarm(msg=msg, error=str(e), traceback=traceback.format_exc())
                     continue
                 finally:
-                    self.logging.info(f"{'>' * 15} 📩 processed {'<' * 15}")
+                    self.logging.info(f"{'>' * 15} ✉️ done {'<' * 15}")
 
             # write forward time to file after all messages processed
             self.write_last_fwd_time_ro_file(mock)

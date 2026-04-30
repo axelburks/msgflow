@@ -4,3 +4,4 @@ pyperclip
 requests
 pytypedstream
 regex
+pydantic

@@ -1,5 +1,8 @@
-import os, logging, json, html, subprocess
+import os, logging, json, html, subprocess, copy
+from typing import Optional
 import requests, regex, pyperclip
+
+TPL_VAR_PATTERN = r"\{\{(\w+)\}\}"
 
 def deep_merge_dicts(low_priority, high_priority):
     if not isinstance(low_priority, dict):
@@ -14,6 +17,138 @@ def deep_merge_dicts(low_priority, high_priority):
             merged[key] = value
     return merged
 
+def render_template(template, mapping):
+    if not template:
+        return ''
+    mapping = mapping or {}
+    template_str = str(template)
+
+    def _repl(m):
+        key = str(m.group(1)).strip()
+        value = mapping.get(key)
+        return '' if value is None else str(value)
+
+    rendered = regex.sub(TPL_VAR_PATTERN, _repl, template_str)
+    rendered = rendered.strip()
+    return rendered
+
+def build_tpl_mapping(msg: dict, **kwargs):
+    mapping = {
+        "sender": msg.get('sender'),
+        "receiver": msg.get('receiver'),
+        "text": msg.get('text'),
+        "timestamp": msg.get('timestamp'),
+        "time_str": msg.get('time_str'),
+        "msg": msg.get('msg'),
+        "code": msg.get('code'),
+        "source": msg.get('source'),
+        "error": kwargs.get('error'),
+        "traceback": kwargs.get('traceback'),
+    }
+    for key, value in kwargs.items():
+        if key in mapping and mapping[key] is not None:
+            continue
+        mapping[key] = value
+    return mapping
+
+def collect_tpl_vars(value, key_name: Optional[str] = None):
+    if is_value_condition_dict(value):
+        used = set()
+        for v in value.values():
+            used |= collect_tpl_vars(v, key_name=key_name)
+        return used
+
+    if isinstance(value, dict):
+        used = set()
+        for k, v in value.items():
+            used |= collect_tpl_vars(v, key_name=str(k))
+        return used
+
+    if isinstance(value, list):
+        used = set()
+        for v in value:
+            used |= collect_tpl_vars(v, key_name=key_name)
+        return used
+
+    if isinstance(value, str):
+        used = set(regex.findall(TPL_VAR_PATTERN, value))
+        if key_name == "payload":
+            parsed = try_parse_json(value)
+            if isinstance(parsed, (dict, list)):
+                used |= collect_tpl_vars(parsed, key_name=None)
+        return used
+
+    return set()
+
+def is_value_condition_dict(value):
+    if not isinstance(value, dict) or not value:
+        return False
+    return all(k in ALLOWED_COND_KEYS for k in value.keys())
+
+def select_value_by_condition(value_dict, has_code, is_alarm):
+    if is_alarm and "$alarm" in value_dict:
+        return value_dict["$alarm"]
+    if has_code and "$code" in value_dict:
+        return value_dict["$code"]
+    if "$default" in value_dict:
+        return value_dict["$default"]
+    for _, v in value_dict.items():
+        return v
+    return None
+
+def try_parse_json(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        return json.loads(value)
+    except Exception:
+        return None
+
+def render_value(value, mapping, has_code, is_alarm, key_name=None):
+    if is_value_condition_dict(value):
+        chosen = select_value_by_condition(value, has_code=has_code, is_alarm=is_alarm)
+        return render_value(chosen, mapping, has_code=has_code, is_alarm=is_alarm, key_name=key_name)
+
+    if isinstance(value, dict):
+        rendered = {}
+        for k, v in value.items():
+            rendered[k] = render_value(v, mapping, has_code=has_code, is_alarm=is_alarm, key_name=k)
+        return rendered
+
+    if isinstance(value, list):
+        return [render_value(v, mapping, has_code=has_code, is_alarm=is_alarm, key_name=key_name) for v in value]
+
+    if isinstance(value, str):
+        if key_name == "payload":
+            parsed = try_parse_json(value)
+            if isinstance(parsed, (dict, list)):
+                return render_value(parsed, mapping, has_code=has_code, is_alarm=is_alarm, key_name=None)
+        return render_template(value, mapping)
+
+    return value
+
+def render_destination(dest: dict, msg: dict = {}, is_alarm: bool = False, **kwargs):
+    mapping = build_tpl_mapping(msg, **kwargs)
+    rendered_dest = copy.deepcopy(dest)
+    rendered_dest["code"] = msg.get('code')
+    has_code = bool(msg.get('code'))
+    rendered_dest = render_value(rendered_dest, mapping, has_code=has_code, is_alarm=is_alarm)
+    return rendered_dest
+
+def build_channel_notifiers_for_cls(cls):
+    channel_notifiers = {}
+    for attr in dir(cls):
+        fn = getattr(cls, attr, None)
+        if not callable(fn):
+            continue
+        channel_name = getattr(fn, "_msgflow_channel", None)
+        if not channel_name:
+            continue
+        if channel_name in channel_notifiers:
+            raise Exception(f"duplicate channel notifier for '{channel_name}'")
+        channel_notifiers[channel_name] = fn
+    return channel_notifiers
+
 def channel(name: str):
     def decorator(fn):
         fn._msgflow_channel = name
@@ -24,21 +159,6 @@ class Base(object):
 
     def __init__(self):
         self.logging = logging.getLogger(__name__)
-        self.channel_notifiers = self._build_channel_notifiers()
-
-    def _build_channel_notifiers(self):
-        channel_notifiers = {}
-        for attr in dir(self):
-            fn = getattr(self, attr, None)
-            if not callable(fn):
-                continue
-            channel_name = getattr(fn, '_msgflow_channel', None)
-            if not channel_name:
-                continue
-            if channel_name in channel_notifiers:
-                raise Exception(f"duplicate channel notifier for '{channel_name}'")
-            channel_notifiers[channel_name] = fn
-        return channel_notifiers
     
     def _format_http_response_text(self, res):
         try:
@@ -169,8 +289,11 @@ class Base(object):
         logmarker = dest.get('logmarker')
         dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
         self.logging.info(f"{dest_mark}")
-        title = dest.get('title')
-        body = dest.get('body')
+        payload = dest.get('payload') or {}
+        title = payload.get('title')
+        body = payload.get('body')
+        if not title or not body:
+            return False, f"{dest_mark} error: title or body is empty in payload"
         try:
             result = subprocess.run(
                 [
@@ -182,8 +305,8 @@ class Base(object):
                 capture_output=True,
                 text=True
             )
-            if dest.get('autoCopy') == 1 and dest.get('copy'):
-                self.save_to_clipboard(dest.get('copy'))
+            if payload.get('autoCopy') == 1 and payload.get('copy'):
+                self.save_to_clipboard(payload.get('copy'))
             return True, result.stdout
         except Exception as e:
             return False, f"{dest_mark} error: {e}"
@@ -191,6 +314,12 @@ class Base(object):
     def save_to_clipboard(self, code):
         pyperclip.copy(str(code))
 
+CHANNEL_NOTIFIERS = build_channel_notifiers_for_cls(Base)
+AVAILABLE_CHANNELS = tuple(CHANNEL_NOTIFIERS.keys())
+LOCAL_CHANNELS = ("notification",)
+REQ_CHANNELS = tuple(c for c in AVAILABLE_CHANNELS if c not in LOCAL_CHANNELS)
+ALLOWED_MATCH_TPL_VARS = tuple(build_tpl_mapping({}).keys())
+ALLOWED_COND_KEYS = ("$default", "$code", "$alarm")
 
 if __name__ == '__main__':
     try:
