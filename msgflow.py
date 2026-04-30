@@ -1,36 +1,17 @@
 import time, argparse, logging, sys
-# from apscheduler.triggers.interval import IntervalTrigger
-# from apscheduler.schedulers.background import BackgroundScheduler
-
 import config
 from smsflow import SMSFlow
-# from emailflow import EmailFlow
 
 
 class MSGFLOW(object):
     def __init__(self):
         self.check_interval = config.cfg.built_cfg.get('check_interval')
-        # self.scheduler = BackgroundScheduler()
-        # self.app_scheduler = BackgroundScheduler()
-        # self.email_list = []
 
     def run(self):
-        # trigger = IntervalTrigger(seconds=self.check_interval)
-        # 
-        # if 'email' in config:
-        #   for i in config['email']:
-        #       self.email_list.append(EmailFlow(i['username'], i['password'], i.get('pop_server', 'pop.' + i['username'].split('@')[1])))
-        #   for i in self.email_list:
-        #       self.scheduler.add_job(i.update_hook, trigger)
-        
         self.smsflow = SMSFlow()
-        # self.scheduler.add_job(self.smsflow.update_hook, trigger)
-        # self.scheduler.start()
-
-        # 临时改为while循环，规避scheduler无法定时执行的问题
         count = 0
         while True:
-            count = (count % 60) + 1
+            count = (count % 300) + 1
             if count == 1: logging.info('checking')
             self.smsflow.update_hook()
             time.sleep(self.check_interval)
