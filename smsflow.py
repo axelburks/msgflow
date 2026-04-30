@@ -4,7 +4,7 @@ import regex, typedstream
 from base import Base, CHANNEL_NOTIFIERS, render_destination
 import config
 
-message_db_file_path = os.path.expanduser('~/Library/Messages/chat.db')
+sms_db_file_path = os.path.expanduser('~/Library/Messages/chat.db')
 
 def _format_ts(ts):
     try:
@@ -47,7 +47,7 @@ class LiteDB(object):
 class SMSFlow(Base):
     def __init__(self):
         super(SMSFlow, self).__init__()
-        self.db = LiteDB(db_file=message_db_file_path)
+        self.db = LiteDB(db_file=sms_db_file_path)
         self.is_1st_start = True
         self.update_time = {}
         saved_update_time = None
@@ -138,7 +138,7 @@ class SMSFlow(Base):
                     msgs.append(item.value)
         return '\n'.join(msgs)
 
-    def query_new_messages(self):
+    def query_new_smss(self):
         sql = """
         select
             message.rowid,
@@ -230,7 +230,7 @@ class SMSFlow(Base):
         finally:
             self.logging.info(f"{'#' * 15} ⚠️  alarm end {'#' * 15}")
 
-    def forward_message(self, msg):
+    def forward_sms(self, msg):
         msg['source'] = self.source
         msg_ts = msg.get('timestamp')
         overall_ok = True
@@ -313,32 +313,32 @@ class SMSFlow(Base):
         if mock:
             new_msgs = mock_msgs
         else:
-            new_msgs = self.query_new_messages()
+            new_msgs = self.query_new_smss()
         
         if new_msgs:
             self.last_new_msg_time = c_timestamp
             for msg in new_msgs:
                 try:
                     print("")
-                    self.logging.info(f"{'>' * 15} 📩 new message {'<' * 15}")
+                    self.logging.info(f"{'>' * 15} 📩 new sms {'<' * 15}")
                     msg['time_str'] = _format_ts(msg.get('timestamp', 0))
                     self.logging.info(f"📨 {json.dumps(msg, ensure_ascii=False)}")
                     msg['msg'] = json.dumps(msg, ensure_ascii=False, default=str)
                     msg['code'] = self.get_code_from_text(msg.get('text'))
                     if msg['code']:
                         self.logging.info(f"🔐 {msg['code']}")
-                    self.forward_message(msg)
+                    self.forward_sms(msg)
                 except Exception as e:
                     traceback.print_exc()
                     self.send_alarm(msg=msg, error=str(e), traceback=traceback.format_exc())
                     continue
                 finally:
-                    self.logging.info(f"{'>' * 15} ✉️ done {'<' * 15}")
+                    self.logging.info(f"{'>' * 15} ✉️  done sms {'<' * 15}")
 
-            # write forward time to file after all messages processed
+            # write forward time to file after all smss processed
             self.write_last_fwd_time_ro_file(mock)
             
-        # write forward time to file only when no message received for 10 minutes   
+        # write forward time to file only when no sms received for 10 minutes   
         elif c_timestamp - self.min_update_time > 60 * 10:
             self.update_time = {key: c_timestamp for key in self.update_time}
             self.write_last_fwd_time_ro_file(mock)
@@ -347,10 +347,10 @@ class SMSFlow(Base):
         elif self.is_1st_start:
             self.write_last_fwd_time_ro_file(mock)
 
-        # notify when no message received for every 24 hours
+        # notify when no sms received for every 24 hours
         if c_timestamp - self.last_new_msg_time > 60 * 60 * 24:
-            self.notification("No message received for 24h", "")
-            self.send_alarm(error="no message received for 24h")
+            self.notification("No sms received for 24h", "")
+            self.send_alarm(error="no sms received for 24h")
             self.last_new_msg_time = c_timestamp
     
     def update_hook(self):
