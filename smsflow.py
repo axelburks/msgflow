@@ -52,8 +52,8 @@ class SMSFlow(Base):
         self.update_time = {}
         saved_update_time = None
         self.built_cfg = config.cfg.built_cfg
-        self.forward_rules = self.built_cfg['forward']['rules']
-        self.forward_destinations = self._flatten_forward_destinations()
+        self.sms_rules = self.built_cfg['sms']['rules']
+        self.sms_destinations = self._flatten_sms_destinations()
         self.alarm_strategy = self.built_cfg['alarm']['strategy']
         self.alarm_destinations = self.built_cfg['alarm']['destinations']
         self.source = self.built_cfg.get('source')
@@ -68,7 +68,7 @@ class SMSFlow(Base):
 
     def init_update_time(self, saved_update_time: dict):
         init_timestamp = int(time.time())
-        for dest in self.forward_destinations:
+        for dest in self.sms_destinations:
             dest_name = dest['name_mark']
             if dest.get('channel') == 'notification':
                 self.update_time[dest_name] = init_timestamp
@@ -86,7 +86,7 @@ class SMSFlow(Base):
         self.min_update_time = min(self.update_time.values())
         self.last_new_msg_time = init_timestamp
     
-    def mock2notify(self, num): 
+    def mock_to_forward(self, num): 
         with open(os.path.expanduser(f"./sms/sms.json"), 'r') as f:
             msgs_list = json.load(f)
         if not isinstance(msgs_list, list):
@@ -101,13 +101,13 @@ class SMSFlow(Base):
         
         try:
             self.send_alarm(error="mock starting")
-            self.check2notify(mock=True, mock_msgs=new_msgs)
+            self.check_to_forward(mock=True, mock_msgs=new_msgs)
         except Exception as e:
             traceback.print_exc()
             self.send_alarm(error=str(e), traceback=traceback.format_exc())
 
-    def check_forward_destinations(self):
-        for dest in self.forward_destinations:
+    def check_destinations(self):
+        for dest in self.sms_destinations:
             try:
                 dest_name = dest.get('name_mark')
                 dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
@@ -197,9 +197,9 @@ class SMSFlow(Base):
             self.logging.debug(f"🕸️ no filters")
             return True
 
-    def _flatten_forward_destinations(self):
+    def _flatten_sms_destinations(self):
         flat = []
-        for rule in self.forward_rules:
+        for rule in self.sms_rules:
             flat.extend(rule['destinations'])
         return flat
     
@@ -234,7 +234,7 @@ class SMSFlow(Base):
         msg['source'] = self.source
         msg_ts = msg.get('timestamp')
         overall_ok = True
-        for rule in self.forward_rules:
+        for rule in self.sms_rules:
             rule_name = rule.get('name_mark')
             rule_filters = rule.get('filters')
             rule_strategy = rule.get('strategy')
@@ -282,7 +282,7 @@ class SMSFlow(Base):
                         break
                 else:
                     any_failed = True
-                    self.logging.error(f"❌ forward failed: {cur_res}")
+                    self.logging.error(f"❌ forward_sms failed: {cur_res}")
                     errors.append(f"{cur_res}")
 
             if rule_strategy == "all":
@@ -290,7 +290,7 @@ class SMSFlow(Base):
                     overall_ok = False
                     self.send_alarm(
                         msg,
-                        error=f"({rule_strategy}) some forward destinations failed",
+                        error=f"({rule_strategy}) some destinations failed",
                         traceback="\n\n".join(errors) if errors else None,
                     )
             else:
@@ -304,7 +304,7 @@ class SMSFlow(Base):
 
         return overall_ok
     
-    def check2notify(self, mock: bool = False, mock_msgs: list = []):
+    def check_to_forward(self, mock: bool = False, mock_msgs: list = []):
         self.min_update_time = min(self.update_time.values())
         self.logging.debug(f"update_time: { {k: f'{_format_ts(v)}({v})' for k, v in self.update_time.items()} }")
         self.logging.debug(f"min_update_time: {_format_ts(self.min_update_time)}({self.min_update_time})")
@@ -355,7 +355,7 @@ class SMSFlow(Base):
     
     def update_hook(self):
         try:
-            self.check2notify()
+            self.check_to_forward()
         except Exception as e:
             traceback.print_exc()
             self.send_alarm(error=str(e), traceback=traceback.format_exc())

@@ -15,7 +15,7 @@
     - [顶层结构](#顶层结构)
     - [channel 通道公共配置](#channel-通道公共配置)
     - [target 转发目标](#target-转发目标)
-    - [forward 转发规则](#forward-转发规则)
+    - [sms 转发规则](#sms-转发规则)
     - [alarm 异常告警](#alarm-异常告警)
   - [模板系统](#模板系统)
     - [值条件字典](#值条件字典)
@@ -59,7 +59,7 @@
      local_notify:
        channel: notification
 
-   forward:
+   sms:
      rules:
        - name_mark: default_rule
          destinations:
@@ -91,8 +91,8 @@ python msgflow.py -d          # debug：加载 ~/.config/msgflow/debug/config.ya
 | `check_interval` | 否 | `3` | 检查新短信的间隔（秒），最小 `1` |
 | `source` | 是 | — | 对应模板变量 `{{source}}`，用于标识来源设备 |
 | `channel` | 否 | 见 [defaults.py](./defaults.py) | 各通道的公共默认配置 |
-| `target` | 是 | — | 具体的转发目标定义，被 `forward` / `alarm` 引用 |
-| `forward` | 是 | — | 短信转发规则 |
+| `target` | 是 | — | 具体的转发目标定义，被 `sms` / `alarm` 引用 |
+| `sms` | 是 | — | 短信转发规则 |
 | `alarm` | 是 | — | 异常告警目标 |
 
 ### channel 通道公共配置
@@ -142,14 +142,14 @@ target:
     # 其余字段会与 channel.<channel> 合并，最终被 destination 再次合并
 ```
 
-### forward 转发规则
+### sms 转发规则
 
 ```yaml
-forward:
+sms:
   strategy: until_success    # 可选，默认 until_success，取值：until_success | all
   rules:
     - name_mark: default_rule       # 必填，规则标识；作为 destination name_mark 的前缀
-      strategy: until_success       # 可选，覆盖 forward.strategy
+      strategy: until_success       # 可选，覆盖 sms.strategy
       filters:                      # 可选；多个 filter 之间为 AND
         - type: and                 # and | or | selector
           match:
@@ -183,7 +183,7 @@ forward:
 ```yaml
 alarm:
   strategy: until_success      # 可选，默认 until_success
-  destinations:                # 结构与 forward.rules[].destinations 一致
+  destinations:                # 结构与 sms.rules[].destinations 一致
     - target: tgbot_test
       payload:
         title: "{{source}}: {{error}}"
@@ -253,7 +253,7 @@ alarm 额外：
 对每个 destination，最终有效配置由以下三层 `deep_merge` 得到（后者覆盖前者）：
 
 ```
-channel.<channel_name>  <  target.<target_name>  <  forward/alarm.destinations[i]
+channel.<channel_name>  <  target.<target_name>  <  sms/alarm.destinations[i]
 ```
 
 最终 `destination.name_mark` 会被改写为 `{{rule.name_mark}}_{{destination.name_mark}}`，用于进度记录与去重。
@@ -271,7 +271,7 @@ python msgflow.py [-d] [-c] [-m [-n N]]
 | 参数 | 说明 |
 | --- | --- |
 | `-d`, `--debug` | 启用调试模式：日志 DEBUG、加载 `debug/config.yaml`、异常不吞 |
-| `-c`, `--check` | 向所有 `forward` destinations 发送一条测试消息验证可用性 |
+| `-c`, `--check` | 向所有 `sms` destinations 发送一条测试消息验证可用性 |
 | `-m`, `--mock` | 从 [sms/sms.json](./sms/sms.json) 随机抽取若干条短信模拟触发 |
 | `-n`, `--num` | 配合 `-m` 使用，模拟消息条数（默认 `2`） |
 
@@ -328,7 +328,7 @@ target:
       copy: "{{text}}"
       autoCopy: 1
 
-forward:
+sms:
   strategy: until_success
   rules:
     - name_mark: default_rule

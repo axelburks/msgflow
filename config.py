@@ -142,17 +142,17 @@ FilterModel: TypeAlias = Annotated[
 
 DestT = TypeVar("DestT")
 
-class ForwardRuleModel(_BaseCfgModel, Generic[DestT]):
+class SMSRuleModel(_BaseCfgModel, Generic[DestT]):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name_mark: str
     strategy: Optional[Strategy] = None
     filters: List[FilterModel] = Field(default_factory=list)
     destinations: List[DestT]
 
-class ForwardModel(_BaseCfgModel, Generic[DestT]):
+class SMSModel(_BaseCfgModel, Generic[DestT]):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     strategy: Strategy
-    rules: List[ForwardRuleModel[DestT]]
+    rules: List[SMSRuleModel[DestT]]
 
 class AlarmModel(_BaseCfgModel, Generic[DestT]):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -166,7 +166,7 @@ class CfgModel(_BaseCfgModel, Generic[DestT]):
     check_interval: int = Field(ge=1)
     source: str
     target: Dict[str, TargetModel]
-    forward: ForwardModel[DestT]
+    sms: SMSModel[DestT]
     alarm: AlarmModel[DestT]
 
 EffectiveCfgModel: TypeAlias = CfgModel[OriDestinationModel]
@@ -185,12 +185,12 @@ class Config:
             self.user_cfg = yaml.safe_load(fp) or {}
         self.effective_cfg = deep_merge_dicts(self.default_cfg, self.user_cfg)
         self._validate_effective_cfg()
-        forward_rules = self._build_forward_rules()
+        sms_rules = self._build_sms_rules()
         alarm_destinations = self._build_alarm_destinations()
         self.built_cfg = deep_merge_dicts(
             self.effective_cfg,
             {
-                "forward": {"rules": forward_rules},
+                "sms": {"rules": sms_rules},
                 "alarm": {"destinations": alarm_destinations},
             },
         )
@@ -242,8 +242,8 @@ class Config:
             built.append(dest_merged)
         return built
 
-    def _build_forward_rules(self):
-        fwd_opt = self.effective_cfg['forward']
+    def _build_sms_rules(self):
+        fwd_opt = self.effective_cfg['sms']
         fwd_strategy = fwd_opt['strategy']
         rules = fwd_opt['rules']
         built_rules = []
@@ -255,7 +255,7 @@ class Config:
             try:
                 built_dests = self._build_destinations(destinations, name_mark_prefix=rule_name_mark)
             except Exception as e:
-                raise Exception(f"build_forward_rules error: rule '{rule_name_mark}' destinations: {e}")
+                raise Exception(f"build_sms_rules error: rule '{rule_name_mark}' destinations: {e}")
 
             built_rules.append(
                 {

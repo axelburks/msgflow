@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Running config for msgflow")
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode: with debug config')
     parser.add_argument('-c', '--check', action='store_true', help='check mode: validate notification channels')
-    parser.add_argument('-m', '--mock', action='store_true', help='mock mode: simulate sms forwarding from sms/sms.json')
+    parser.add_argument('-m', '--mock', action='store_true', help='mock mode: simulate sms receiving from ./sms/sms.json')
     parser.add_argument('-n', '--num', type=int, default=2, help='number of sms messages to simulate')
     args = parser.parse_args()
 
@@ -55,11 +55,11 @@ if __name__ == '__main__':
         sys.exit(1)
 
     if args.check:
-        SMSFlow().check_forward_destinations()
+        SMSFlow().check_destinations()
         sys.exit(0)
-
+    
     if args.mock:
-        SMSFlow().mock2notify(args.num)
+        SMSFlow().mock_to_forward(args.num)
         sys.exit(0)
     
     app = MSGFLOW()

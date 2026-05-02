@@ -1,7 +1,7 @@
 CONFIG_DEFAULTS = {
     "check_interval": 3,
     "source": "msgflow",
-    "forward": {
+    "sms": {
         "strategy": "until_success",
     },
     "alarm": {
