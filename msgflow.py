@@ -10,11 +10,28 @@ class MSGFLOW(object):
     def run(self):
         self.smsflow = SMSFlow()
         count = 0
+        frame = 0
+        tick = 0.2
+        spinner = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+        start = time.monotonic()
+        next_check = start
+        is_tty = sys.stderr.isatty()
         while True:
-            count = (count % 300) + 1
-            if count == 1: logging.info('checking')
-            self.smsflow.update_hook()
-            time.sleep(self.check_interval)
+            now = time.monotonic()
+            if now >= next_check:
+                count += 1
+                if not is_tty and count % 300 == 1:
+                    logging.info(f'checking #{count}')
+                self.smsflow.update_hook()
+                next_check = now + self.check_interval
+            if is_tty:
+                elapsed = int(now - start)
+                h, rem = divmod(elapsed, 3600)
+                m, s = divmod(rem, 60)
+                sys.stderr.write(f'\r{spinner[frame % len(spinner)]} uptime {h:02d}:{m:02d}:{s:02d} checking')
+                sys.stderr.flush()
+                frame += 1
+            time.sleep(tick if is_tty else self.check_interval)
 
 
 if __name__ == '__main__':
@@ -27,7 +44,7 @@ if __name__ == '__main__':
 
     logging.basicConfig(
         level = logging.DEBUG if args.debug else logging.INFO,
-        format = '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s'
+        format = ('\r\x1b[K' if sys.stderr.isatty() else '') + '%(asctime)s - %(name)s - %(levelname)-5s - %(message)s'
     )
     try:
         config.cfg = config.Config(debug=args.debug)

@@ -7,5 +7,4 @@ build*/*
 dist*/*
 *.yaml
 *DS_Store*
-venv
-msgflow.zip
+.venv
