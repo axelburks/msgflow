@@ -216,7 +216,7 @@ CHANNEL_NOTIFIERS = build_channel_notifiers_for_cls(Channels)
 # Tuple of all registered channel names (used by the config schema).
 AVAILABLE_CHANNELS = tuple(CHANNEL_NOTIFIERS.keys())
 # Local-only channels don't go out over the network; their cursors are reset
-# on every startup (see MsgFlow.init_update_time).
+# on every startup (see MsgFlow.init_cursor).
 LOCAL_CHANNELS = ("notification",)
 # Remote/HTTP channels: everything not in LOCAL_CHANNELS.
 REQ_CHANNELS = tuple(c for c in AVAILABLE_CHANNELS if c not in LOCAL_CHANNELS)

@@ -5,6 +5,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Offset between Mac absolute time (seconds since 2001-01-01 UTC) and the
+# Unix epoch. Shared by any flow whose source DB stores timestamps in
+# Mac-abs-time (e.g. chat.db's `message.date`, usernoted's `delivered_date`).
+MAC_EPOCH_OFFSET = 978307200
+
 # In-process caches for bundle-id -> app-name lookups. `mdfind` is relatively
 # expensive, so we cache positive hits forever and cache misses for TTL seconds
 # to avoid repeatedly spawning mdfind for apps not installed on this machine.
@@ -69,19 +74,6 @@ def format_ts(ts: Any) -> str:
         return dt.strftime('%Y-%m-%d %H:%M:%S.%f')
     except Exception:
         return ''
-
-
-def parse_time_str(time_str: Any) -> Optional[float]:
-    # Inverse of `format_ts`: parse either a "YYYY-MM-DD HH:MM:SS.ffffff" or
-    # "YYYY-MM-DD HH:MM:SS" string into a POSIX timestamp (local TZ).
-    # Returns None if the string doesn't match any known format.
-    s = str(time_str)
-    for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S'):
-        try:
-            return datetime.datetime.strptime(s, fmt).timestamp()
-        except Exception:
-            continue
-    return None
 
 
 def deep_merge_dicts(low_priority: Any, high_priority: Any) -> dict[str, Any]:

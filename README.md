@@ -80,7 +80,7 @@
 常用辅助命令：
 ```bash
 python app.py -c          # check：对所有转发目标发送一次测试消息，验证配置可用
-python app.py -m -n 3     # mock：从 sms/sms.json 中随机取 N 条模拟触发
+python app.py -m -n 3     # mock：默认对 sms/notify 进行模拟；可配合 -k 指定 kind
 python app.py -d          # debug：加载 ~/.config/msgflow/debug/config.yaml，日志级别 DEBUG 
 ```
 
@@ -211,7 +211,8 @@ notify:
 - `{{title}}`：通知标题
 - `{{subtitle}}`：副标题（可能为空）
 - `{{body}}`：通知正文
-- `{{sender}}` / `{{receiver}}`：统一填为发送通知的 App 的 bundle id（如 `ru.keepcoder.Telegram`、`com.apple.MobileSMS`）
+- `{{sender}}`：发送通知的 App bundle id（如 `ru.keepcoder.Telegram`、`com.apple.MobileSMS`）
+- `{{receiver}}`：发送通知的 App 可读名称（如 `Telegram`、`Messages`）；无法识别时回退为 bundle id
 - `{{text}}`：上述 title/subtitle/body 用换行拼接的完整文本，也会参与验证码识别
 
 最终 `destination.name_mark` 会被写成 `notify_{rule.name_mark}_{destination.name_mark}`（与 `sms_` 前缀对称），与 `sms` 的投递进度相互独立，共同写入 `~/.config/msgflow/record.json`（以 `sms` / `notify` 为顶层键分组）。
@@ -303,6 +304,13 @@ channel.<channel_name>  <  target.<target_name>  <  sms/alarm.destinations[i]
 最终 `destination.name_mark` 会被改写为 `{{kind}}_{{rule.name_mark}}_{{destination.name_mark}}`（`kind` 为 `sms` / `notify`；`alarm.destinations` 不加前缀），用于进度记录与去重。
 
 每条消息的投递进度会写入 `~/.config/msgflow/record.json`，重启后可从上次位置继续。
+
+当前游标规则：
+
+- `sms` 使用 `message.ROWID` 作为单调递增游标，避免因 iPhone 延迟同步导致 `date` 乱序而漏发
+- `notify` 使用 `record.delivered_date` 作为单调递增游标，避免通知删除后 `rec_id` 回落造成重复或漏发
+- 首次启动或某个 destination 尚无记录时，会从数据库当前末尾开始，不回放历史消息
+- 从旧版升级到当前游标格式后，建议手动删除一次旧的 `~/.config/msgflow/record.json`
 
 ---
 

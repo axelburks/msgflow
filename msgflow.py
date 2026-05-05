@@ -2,7 +2,7 @@ import os, sys, time, json, random, traceback, logging
 from typing import Any, Optional
 import regex
 
-from utils import format_ts, parse_time_str, get_code_from_text
+from utils import format_ts, get_code_from_text
 from template import render_destination
 from channels import Channels, CHANNEL_NOTIFIERS
 
@@ -16,98 +16,124 @@ class MsgFlow(Channels):
     Subclasses (e.g. SMSFlow, NotifyFlow) implement `query_new_msgs` to fetch
     new messages from a data source and reuse the shared pipeline provided
     here: filtering, rendering, dispatching to destinations, alarm handling
-    and persistence of the last-forwarded timestamp per destination.
+    and persistence of the last-forwarded cursor per destination.
+
+    The cursor is a monotonically increasing integer key local to each source
+    DB (e.g. `message.ROWID` for chat.db, `record.rec_id` for usernoted.db),
+    not a wall-clock timestamp. This is robust against records whose
+    `date/delivered_date` is older than previously-seen rows (e.g. SMS that
+    synced late from a flaky iPhone network).
     """
 
     KIND = "msg"
     NEW_MSG_HIT = "new"
     DONE_MSG_HIT = "done"
     NO_NEW_MSG_TEXT = "no msg received for 24h"
-    # Mock 数据文件路径；子类必须显式指定，供 `mock_to_forward` 读取。
+    # Cursor field name; subclasses must set this explicitly (for example,
+    # "rowid" or "rec_id"). It is both the key in the `msg` dict and the
+    # column alias selected in SQL.
+    CURSOR_FIELD: Optional[str] = None
+    # Path to the mock data file; subclasses must set this explicitly for
+    # `mock_to_forward` to read.
     MOCK_FILE: Optional[str] = None
 
     def __init__(self) -> None:
         import config as _config
         super().__init__()
+        if not self.CURSOR_FIELD:
+            raise ValueError(f"{type(self).__name__} did not set CURSOR_FIELD")
         self.is_1st_start = True
-        self.update_time: dict[str, float] = {}
+        # Persisted: per-destination last-forwarded cursor key. The cursor is
+        # monotonically increasing within a given flow (e.g. ROWID for SMS,
+        # delivered_date for notifications) but its concrete type is chosen
+        # by the subclass — int or float both work as long as `>` orders them
+        # correctly and JSON round-trips losslessly.
+        self.cursor: dict[str, float] = {}
+        # In-memory only: last seen message timestamp per dest, for readable logs.
+        self.last_seen_ts: dict[str, float] = {}
         self.built_cfg = _config.cfg.built_cfg
         self.rules = self.built_cfg.get(self.KIND, {}).get('rules', [])
         self.destinations = self._flatten_destinations()
         self.alarm_strategy = self.built_cfg['alarm']['strategy']
         self.alarm_destinations = self.built_cfg['alarm']['destinations']
         self.source = self.built_cfg.get('source')
-        self.last_fwd_time_file = _config.cfg.record_file_path
-        self.init_update_time()
+        self.record_file = _config.cfg.record_file_path
+        self.init_cursor()
 
     # ---------- Config / state ----------
 
     def _flatten_destinations(self) -> list[dict[str, Any]]:
         # Flatten destinations across all rules into a single list
-        # so we can uniformly track last-forwarded time per destination.
+        # so we can uniformly track last-forwarded cursor per destination.
         flat = []
         for rule in self.rules:
             flat.extend(rule['destinations'])
         return flat
 
-    def init_update_time(self, load_saved: bool = True) -> None:
-        # Initialize `update_time` (last-forwarded timestamp per destination).
+    def initial_cursor(self) -> float:
+        # Subclasses return the current max cursor key in the source DB,
+        # used to initialize fresh destinations so they start "at DB tail"
+        # rather than replaying history.
+        raise NotImplementedError
+
+    def init_cursor(self, load_saved: bool = True) -> None:
+        # Initialize `cursor` (last-forwarded cursor key per destination).
         # When `load_saved` is True, previously persisted values are restored
         # so restarts don't re-forward old messages.
-        saved_update_time = None
-        if load_saved and os.path.exists(self.last_fwd_time_file):
+        saved_cursor = None
+        if load_saved and os.path.exists(self.record_file):
             try:
-                with open(self.last_fwd_time_file, 'r') as fp:
+                with open(self.record_file, 'r') as fp:
                     data = json.load(fp)
                 if isinstance(data, dict):
-                    saved_update_time = data.get(self.KIND)
+                    saved_cursor = data.get(self.KIND)
             except Exception as e:
-                logger.warning(f"reading last_fwd_time_file error: {e}")
+                logger.error(f"❌ reading record_file error: {e}")
+                sys.exit(1)
 
-        init_timestamp = time.time()
+        db_tail = self.initial_cursor()
         for dest in self.destinations:
             dest_name = dest['name_mark']
             # Local-only channels (e.g. macOS notification) are not persisted:
             # they are side effects on the current machine, not remote delivery,
-            # so always start from "now" to avoid spamming on restart.
+            # so always start from the DB tail to avoid spamming on restart.
             if dest.get('channel') == 'notification':
-                self.update_time[dest_name] = init_timestamp
+                self.cursor[dest_name] = db_tail
                 continue
-            if saved_update_time and dest_name in saved_update_time:
-                saved_value = saved_update_time[dest_name]
-                parsed = parse_time_str(saved_value)
-                if parsed is None:
+            if saved_cursor and dest_name in saved_cursor:
+                saved_value = saved_cursor[dest_name]
+                if not isinstance(saved_value, (int, float)) or isinstance(saved_value, bool):
                     raise ValueError(
-                        f"saved_update_time has invalid time format for '{dest_name}': {saved_value}"
+                        f"saved cursor has invalid type for '{dest_name}': {saved_value!r}"
                     )
-                self.update_time[dest_name] = parsed
+                self.cursor[dest_name] = saved_value
             else:
-                self.update_time[dest_name] = init_timestamp
-        self.min_update_time = min(self.update_time.values()) if self.update_time else init_timestamp
-        self.last_new_msg_time = init_timestamp
+                self.cursor[dest_name] = db_tail
+        self.min_cursor = min(self.cursor.values()) if self.cursor else db_tail
+        self.last_new_msg_time = time.time()
 
-    def write_last_fwd_time_to_file(self, mock: bool = False) -> None:
-        # Persist last-forwarded timestamps atomically via write-tmp + os.replace
-        # to avoid corrupting the JSON record if the process is killed mid-write.
+    def write_record_to_file(self, mock: bool = False) -> None:
+        # Persist cursor values atomically via write-tmp + os.replace to
+        # avoid corrupting the JSON record if the process is killed mid-write.
         self.is_1st_start = False
         if mock:
             return
         existing = {}
-        if os.path.exists(self.last_fwd_time_file):
+        if os.path.exists(self.record_file):
             try:
-                with open(self.last_fwd_time_file, 'r') as f:
+                with open(self.record_file, 'r') as f:
                     loaded = json.load(f)
                     if isinstance(loaded, dict):
                         existing = loaded
             except Exception:
                 existing = {}
-        existing[self.KIND] = {k: format_ts(v) for k, v in self.update_time.items()}
-        tmp_file = self.last_fwd_time_file + '.tmp'
+        existing[self.KIND] = dict(self.cursor)
+        tmp_file = self.record_file + '.tmp'
         with open(tmp_file, 'w') as f:
             json.dump(existing, f, indent=4, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_file, self.last_fwd_time_file)
+        os.replace(tmp_file, self.record_file)
 
     # ---------- Filters / send ----------
 
@@ -192,13 +218,25 @@ class MsgFlow(Channels):
         finally:
             logger.info(f"{'#' * 15} ⚠️  {self.KIND} alarm end {'#' * 15}")
 
+    def _advance_cursor(self, dest_name: str, msg_key: float, msg_ts: Optional[float]) -> None:
+        # Advance the persisted cursor and refresh the in-memory last_seen_ts
+        # (the latter is for log readability only and is not persisted).
+        self.cursor[dest_name] = msg_key
+        if msg_ts is not None:
+            self.last_seen_ts[dest_name] = float(msg_ts)
+
     def forward_msg(self, msg: dict[str, Any]) -> bool:
         # Forward a single message through every configured rule.
         # For each rule, apply filters, then attempt delivery per destination
-        # using the rule's strategy. Advance `update_time` per destination so
+        # using the rule's strategy. Advance `cursor` per destination so
         # already-delivered (or filtered-out) messages are not retried.
         msg['source'] = self.source
+        msg_key = msg.get(self.CURSOR_FIELD)
         msg_ts = msg.get('timestamp')
+        if not isinstance(msg_key, (int, float)) or isinstance(msg_key, bool):
+            raise ValueError(
+                f"msg missing numeric cursor field '{self.CURSOR_FIELD}': {msg_key!r}"
+            )
         overall_ok = True
         for rule in self.rules:
             rule_name = rule.get('name_mark')
@@ -212,8 +250,8 @@ class MsgFlow(Channels):
                 # message won't be re-evaluated on the next tick.
                 for dest in rule_dests:
                     dest_name = dest["name_mark"]
-                    if msg_ts > self.update_time.get(dest_name, 0):
-                        self.update_time[dest_name] = msg_ts
+                    if msg_key > self.cursor.get(dest_name, -1):
+                        self._advance_cursor(dest_name, msg_key, msg_ts)
                 continue
 
             attempted = 0
@@ -224,16 +262,15 @@ class MsgFlow(Channels):
             for idx, dest in enumerate(rule_dests):
                 dest_name = dest["name_mark"]
                 dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
-                last_ts = self.update_time.get(dest_name, 0)
-                ts_passed = msg_ts > last_ts
+                last_key = self.cursor.get(dest_name, -1)
+                key_passed = msg_key > last_key
                 logger.debug(
-                    f"{dest_mark} ts "
-                    f"{'[√]' if ts_passed else '[x]'}: "
-                    f"{format_ts(msg_ts)} {'>' if ts_passed else '<='} {format_ts(last_ts)}"
-                    f" ({msg_ts} {'>' if ts_passed else '<='} {last_ts})"
+                    f"{dest_mark} cursor "
+                    f"{'[√]' if key_passed else '[x]'}: "
+                    f"{msg_key} {'>' if key_passed else '<='} {last_key}"
                 )
-                if not ts_passed:
-                    # This destination has already been updated past msg_ts
+                if not key_passed:
+                    # This destination has already been updated past msg_key
                     # (e.g. delivered previously), skip.
                     continue
 
@@ -243,14 +280,14 @@ class MsgFlow(Channels):
                 attempted += 1
                 if cur_status:
                     any_success = True
-                    self.update_time[dest_name] = msg_ts
+                    self._advance_cursor(dest_name, msg_key, msg_ts)
                     if rule_strategy == "until_success":
                         # Short-circuit: mark remaining destinations as caught up
                         # to avoid re-sending this msg to them later.
                         for remaining in rule_dests[idx + 1:]:
                             r_name = remaining["name_mark"]
-                            if msg_ts > self.update_time.get(r_name, 0):
-                                self.update_time[r_name] = msg_ts
+                            if msg_key > self.cursor.get(r_name, -1):
+                                self._advance_cursor(r_name, msg_key, msg_ts)
                         break
                 else:
                     any_failed = True
@@ -280,8 +317,10 @@ class MsgFlow(Channels):
     # ---------- Main loop entrypoint ----------
 
     def query_new_msgs(self) -> list[dict[str, Any]]:
-        # Subclasses must return a list of new-message dicts sorted by timestamp,
-        # containing at minimum a `timestamp` field (float seconds since epoch).
+        # Subclasses must return a list of new-message dicts sorted by the
+        # cursor field, each containing at minimum:
+        # - `timestamp` (float seconds since epoch), for templates/logs
+        # - `self.CURSOR_FIELD` (int), the monotonic cursor key
         raise NotImplementedError
 
     def mock_to_forward(self, num: int) -> None:
@@ -297,12 +336,15 @@ class MsgFlow(Channels):
             raise ValueError(f"invalid mock file format ({mock_file}), expected list, got {type(msgs_list)}")
         actual_num = min(len(msgs_list), num)
         new_msgs = random.sample(msgs_list, actual_num)
-        # Reset cursors from "now" (ignore saved record) so all mock msgs pass
-        # the timestamp gate.
-        self.init_update_time(load_saved=False)
+        # Reset cursors from "DB tail" (ignore saved record) so all mock msgs
+        # pass the cursor gate.
+        self.init_cursor(load_saved=False)
 
+        base_key = self.min_cursor
+        base_ts = time.time()
         for idx, msg in enumerate(new_msgs):
-            msg["timestamp"] = self.min_update_time + idx + 1
+            msg[self.CURSOR_FIELD] = base_key + idx + 1
+            msg["timestamp"] = base_ts + idx + 1
             msg["time_str"] = format_ts(msg["timestamp"])
 
         try:
@@ -314,11 +356,13 @@ class MsgFlow(Channels):
 
     def check_to_forward(self, mock: bool = False, mock_msgs: list[dict[str, Any]] = []) -> None:
         # One tick of the main loop: fetch new messages and forward each of them.
-        # Also handles the "no new message for 24h" watchdog and periodic cursor
-        # advance when idle so the saved record stays fresh.
-        self.min_update_time = min(self.update_time.values()) if self.update_time else time.time()
-        logger.debug(f"[{self.KIND}] update_time: { {k: f'{format_ts(v)}({v})' for k, v in self.update_time.items()} }")
-        logger.debug(f"[{self.KIND}] min_update_time: {format_ts(self.min_update_time)}({self.min_update_time})")
+        # Also handles the "no new message for 24h" watchdog.
+        self.min_cursor = min(self.cursor.values()) if self.cursor else 0.0
+        logger.debug(
+            f"[{self.KIND}] cursor: "
+            f"{ {k: f'{v}({format_ts(self.last_seen_ts[k])})' if k in self.last_seen_ts else str(v) for k, v in self.cursor.items()} }"
+        )
+        logger.debug(f"[{self.KIND}] min_cursor: {self.min_cursor}")
         c_timestamp = time.time()
 
         new_msgs = mock_msgs if mock else self.query_new_msgs()
@@ -329,7 +373,6 @@ class MsgFlow(Channels):
                 try:
                     print("")
                     logger.info(f"{'>' * 15} {self.NEW_MSG_HIT} {self.KIND} {'<' * 15}")
-                    msg['time_str'] = format_ts(msg.get('timestamp', 0))
                     logger.info(f"📨 {json.dumps(msg, ensure_ascii=False, default=str)}")
                     # Keep a full JSON dump of the original message in `msg` so
                     # templates can reference the raw payload via {{msg}}.
@@ -345,18 +388,12 @@ class MsgFlow(Channels):
                 finally:
                     logger.info(f"{'>' * 15} {self.DONE_MSG_HIT} {self.KIND} {'<' * 15}")
 
-            self.write_last_fwd_time_to_file(mock)
-
-        elif c_timestamp - self.min_update_time > 60 * 10:
-            # Idle > 10min: pull all destination cursors forward to "now" and
-            # persist. This bounds the lookback window after long idles.
-            self.update_time = {key: c_timestamp for key in self.update_time}
-            self.write_last_fwd_time_to_file(mock)
+            self.write_record_to_file(mock)
 
         elif self.is_1st_start:
             # On the very first tick, persist the initial state so a fresh run
             # leaves a record file on disk even if no new message arrived.
-            self.write_last_fwd_time_to_file(mock)
+            self.write_record_to_file(mock)
 
         if c_timestamp - self.last_new_msg_time > 60 * 60 * 24:
             # Watchdog: if no new message for 24h, surface it via a local
@@ -364,7 +401,7 @@ class MsgFlow(Channels):
             self.send_notification(self.NO_NEW_MSG_TEXT)
             self.send_alarm(error=self.NO_NEW_MSG_TEXT)
             self.last_new_msg_time = c_timestamp
-    
+
     def update_hook(self) -> None:
         # Entry point invoked by the app scheduler on every tick.
         # Wraps `check_to_forward` so any unhandled error raises an alarm

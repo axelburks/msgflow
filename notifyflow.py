@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from msgflow import MsgFlow
 from litedb import LiteDB
-from utils import get_app_name
+from utils import get_app_name, format_ts, MAC_EPOCH_OFFSET
 
 logger = logging.getLogger(__name__)
 
@@ -42,35 +42,47 @@ class NotifyFlow(MsgFlow):
     NEW_MSG_HIT = "📬 new"
     DONE_MSG_HIT = "📭 done"
     NO_NEW_MSG_TEXT = "no notification received for 24h"
+    # Cursor uses `record.delivered_date` in its raw Mac-absolute-time form
+    # (seconds since 2001-01-01). Comparing the raw column in SQL lets
+    # SQLite use any index that may exist on it and avoids recomputing the
+    # Unix-epoch expression for every candidate row. The Unix-epoch value
+    # is derived in Python and exposed on msg['timestamp'] for templates/logs.
+    #
+    # `delivered_date` is written at delivery time and is strictly increasing
+    # across normal notifications. Unlike `rec_id` — which is `INTEGER
+    # PRIMARY KEY` without AUTOINCREMENT and therefore gets reused after rows
+    # are dismissed/deleted — `delivered_date` is unaffected by row deletions,
+    # making it a correct monotonic cursor.
+    CURSOR_FIELD = "delivered_date"
     MOCK_FILE = "./notify/notify.json"
 
     def __init__(self) -> None:
         self.db = LiteDB(db_file=notify_db_file_path)
         super().__init__()
 
+    def initial_cursor(self) -> float:
+        # Start fresh destinations at current DB tail (most recent delivery
+        # timestamp) so we don't replay history.
+        rows = self.db.select(
+            "SELECT IFNULL(MAX(delivered_date), 0) AS max_dd FROM record "
+            "WHERE delivered_date IS NOT NULL"
+        )
+        return float(rows[0]['max_dd']) if rows else 0.0
+
     def query_new_msgs(self) -> list[dict[str, Any]]:
-        # SQL converts Mac absolute time (2001 epoch) to Unix timestamp so the
-        # Python side does no conversion.
-        # The +0.00001s offset works around precision loss: record.json keeps
-        # time_str only up to microseconds (6 digits), and when re-read the
-        # value can be ~1μs smaller than the original double. A strict `>` would
-        # then re-select the same record and cause duplicate forwarding.
-        # Empirical min spacing between adjacent notifications is ~370μs, far
-        # above 10μs, so we won't miss the next record either.
-        ts_cursor = self.min_update_time + 0.00001
         sql = """
             SELECT
                 record.rec_id,
                 app.identifier AS app_identifier,
-                (record.delivered_date + 978307200) AS timestamp,
+                record.delivered_date,
                 record.data AS data
             FROM record
             JOIN app USING (app_id)
             WHERE record.delivered_date IS NOT NULL
-              AND (record.delivered_date + 978307200) > ?
+              AND record.delivered_date > ?
             ORDER BY record.delivered_date
         """
-        rows = self.db.select(sql, (ts_cursor,))
+        rows = self.db.select(sql, (self.min_cursor,))
 
         results = []
         for row in rows:
@@ -99,11 +111,17 @@ class NotifyFlow(MsgFlow):
                 # Map bundle ID to a human-readable app name when possible.
                 receiver = get_app_name(sender) or sender
 
+                # Mac absolute time -> Unix epoch for templates/logs. `delivered_date`
+                # is also kept on the msg because it is the cursor field.
+                delivered_date = float(row.get('delivered_date'))
+                timestamp = delivered_date + MAC_EPOCH_OFFSET
                 msg = {
                     'rec_id': row.get('rec_id'),
                     'sender': sender,
                     'receiver': receiver,
-                    'timestamp': float(row.get('timestamp')),
+                    'delivered_date': delivered_date,
+                    'timestamp': timestamp,
+                    'time_str': format_ts(timestamp),
                     'title': title,
                     'subtitle': subtitle,
                     'body': body,
