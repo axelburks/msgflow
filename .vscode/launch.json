@@ -5,14 +5,14 @@
       "name": "normal",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/msgflow.py",
+      "program": "${workspaceFolder}/app.py",
       "args": [],
     },
     {
       "name": "check-normal",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/msgflow.py",
+      "program": "${workspaceFolder}/app.py",
       "args": [
         "-c",
       ],
@@ -21,7 +21,7 @@
       "name": "mock-normal",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/msgflow.py",
+      "program": "${workspaceFolder}/app.py",
       "args": [
         "-m",
       ],
@@ -30,7 +30,7 @@
       "name": "debug",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/msgflow.py",
+      "program": "${workspaceFolder}/app.py",
       "args": [
         "-d",
       ],
@@ -39,7 +39,7 @@
       "name": "check-debug",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/msgflow.py",
+      "program": "${workspaceFolder}/app.py",
       "args": [
         "-c",
         "-d",
@@ -49,7 +49,7 @@
       "name": "mock-debug",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/msgflow.py",
+      "program": "${workspaceFolder}/app.py",
       "args": [
         "-m",
         "-d",

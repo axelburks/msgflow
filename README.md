@@ -2,6 +2,11 @@
 
 在 macOS 上实时读取短信/通知等消息，按规则转发到 Bark / Telegram / 飞书 / PushGo / Webhook / 通知消息 等通道，并支持模板渲染。
 
+支持两类消息源：
+
+- `sms`：iMessage 短信（读取 `~/Library/Messages/chat.db`）
+- `notify`：macOS 通知中心的第三方 App 通知（读取 `~/Library/Group Containers/group.com.apple.usernoted/db2/db`）
+
 ---
 
 ## 目录
@@ -16,6 +21,7 @@
     - [channel 通道公共配置](#channel-通道公共配置)
     - [target 转发目标](#target-转发目标)
     - [sms 转发规则](#sms-转发规则)
+    - [notify 通知消息转发规则](#notify-通知消息转发规则)
     - [alarm 异常告警](#alarm-异常告警)
   - [模板系统](#模板系统)
     - [值条件字典](#值条件字典)
@@ -68,14 +74,14 @@
 
 3. 启动
    ```bash
-   python msgflow.py
+   python app.py
    ```
 
 常用辅助命令：
 ```bash
-python msgflow.py -c          # check：对所有转发目标发送一次测试消息，验证配置可用
-python msgflow.py -m -n 3     # mock：从 sms/sms.json 中随机取 N 条模拟触发
-python msgflow.py -d          # debug：加载 ~/.config/msgflow/debug/config.yaml，日志级别 DEBUG 
+python app.py -c          # check：对所有转发目标发送一次测试消息，验证配置可用
+python app.py -m -n 3     # mock：从 sms/sms.json 中随机取 N 条模拟触发
+python app.py -d          # debug：加载 ~/.config/msgflow/debug/config.yaml，日志级别 DEBUG 
 ```
 
 ---
@@ -99,7 +105,7 @@ python msgflow.py -d          # debug：加载 ~/.config/msgflow/debug/config.ya
 
 `channel.<name>` 为对应 `channel` 类型的公共默认值。所有内置通道均已在 [defaults.py](./defaults.py) 预置合理默认，用户通常无需全部覆盖。
 
-支持的 `channel` 类型（见 [base.py](./base.py)）：
+支持的 `channel` 类型（见 [channels.py](./channels.py)）：
 
 | channel | 类型 | 说明 |
 | --- | --- | --- |
@@ -160,7 +166,7 @@ sms:
             code: true              # true/false
       destinations:                 # 规则命中后投递的目标列表
         - target: bark_test         # 必填，引用 target 名
-          name_mark: bark_test      # 可选，默认等于 target；最终为 {rule.name_mark}_{destination.name_mark}
+          name_mark: bark_test      # 可选，默认等于 target；最终会被改写为 {kind}_{rule.name_mark}_{destination.name_mark}
           payload:                  # 可选，进一步覆盖 target/channel 的 payload
             group: msgflow
 ```
@@ -177,6 +183,40 @@ sms:
 - `selector`：`match` 的值为 `true/false`，判断 msg 中对应 key 是否存在且为真
 
 过滤器 `match` 可用的 key（短信消息字段）：`sender`、`receiver`、`timestamp`、`time_str`、`text`、`msg`、`code`。
+
+### notify 通知消息转发规则
+
+结构与 `sms` 完全一致，默认未启用；填写 `notify.rules` 后自动启用。
+
+```yaml
+notify:
+  strategy: until_success      # 可选，默认 until_success
+  rules:
+    - name_mark: default_notify
+      strategy: until_success
+      filters:
+        - type: and
+          match:
+            sender: "com\\.apple\\.MobileSMS"       # bundle id，regex.match 从开头匹配
+        - type: selector
+          match:
+            code: true
+      destinations:
+        - target: bark_test
+        - target: local_notify
+```
+
+`notify` 消息相比 `sms` 会额外提供以下字段供 `filters.match` 与模板使用：
+
+- `{{title}}`：通知标题
+- `{{subtitle}}`：副标题（可能为空）
+- `{{body}}`：通知正文
+- `{{sender}}` / `{{receiver}}`：统一填为发送通知的 App 的 bundle id（如 `ru.keepcoder.Telegram`、`com.apple.MobileSMS`）
+- `{{text}}`：上述 title/subtitle/body 用换行拼接的完整文本，也会参与验证码识别
+
+最终 `destination.name_mark` 会被写成 `notify_{rule.name_mark}_{destination.name_mark}`（与 `sms_` 前缀对称），与 `sms` 的投递进度相互独立，共同写入 `~/.config/msgflow/record.json`（以 `sms` / `notify` 为顶层键分组）。
+
+> 注意：通知中心的数据库在系统后台持续写入（WAL 模式），MsgFlow 以只读 + `immutable=1` 模式打开，不会对系统造成干扰。仍然需要对终端授予「完全磁盘访问权限」。
 
 ### alarm 异常告警
 
@@ -239,6 +279,10 @@ payload:
 - `{{source}}`（来自 `source` 配置）
 - `{{msg}}`（当前处理消息的 JSON 字符串）
 
+通知消息（`notify`）额外：
+
+- `{{title}}`、`{{subtitle}}`、`{{body}}`
+
 alarm 额外：
 
 - `{{error}}`：告警标题信息
@@ -256,7 +300,7 @@ alarm 额外：
 channel.<channel_name>  <  target.<target_name>  <  sms/alarm.destinations[i]
 ```
 
-最终 `destination.name_mark` 会被改写为 `{{rule.name_mark}}_{{destination.name_mark}}`，用于进度记录与去重。
+最终 `destination.name_mark` 会被改写为 `{{kind}}_{{rule.name_mark}}_{{destination.name_mark}}`（`kind` 为 `sms` / `notify`；`alarm.destinations` 不加前缀），用于进度记录与去重。
 
 每条消息的投递进度会写入 `~/.config/msgflow/record.json`，重启后可从上次位置继续。
 
@@ -265,15 +309,16 @@ channel.<channel_name>  <  target.<target_name>  <  sms/alarm.destinations[i]
 ## 命令行参数
 
 ```
-python msgflow.py [-d] [-c] [-m [-n N]]
+python app.py [-d] [-c] [-m [-n N]] [-k sms|notify|all]
 ```
 
 | 参数 | 说明 |
 | --- | --- |
 | `-d`, `--debug` | 启用调试模式：日志 DEBUG、加载 `debug/config.yaml`、异常不吞 |
-| `-c`, `--check` | 向所有 `sms` destinations 发送一条测试消息验证可用性 |
-| `-m`, `--mock` | 从 [sms/sms.json](./sms/sms.json) 随机抽取若干条短信模拟触发 |
+| `-c`, `--check` | 向所有 destinations 发送一条测试消息验证可用性 |
+| `-m`, `--mock` | 模拟触发消息转发流程（sms 从 [sms/sms.json](./sms/sms.json) 抽取；notify 从 [notify/notify.json](./notify/notify.json) 抽取） |
 | `-n`, `--num` | 配合 `-m` 使用，模拟消息条数（默认 `2`） |
+| `-k`, `--kind` | 配合 `-c` / `-m` 使用，指定对 `sms` / `notify` / `all`（默认 `all`）执行 |
 
 ---
 
@@ -370,7 +415,8 @@ alarm:
 - [x] 异常告警通道（alarm），失败自动上报
 - [x] 基于值条件字典（`$default` / `$code` / `$alarm`）的模板系统
 - [x] pydantic 严格校验配置
-- [ ] 通知消息（macOS Notification Center）的监听与转发
+- [x] 通知消息（macOS Notification Center）的监听与转发
+- [ ] 支持用户配置指定内容的正则替换
 - [ ] macOS App 版本，支持自启动、后台运行、日志记录等功能
 
 ## Credits

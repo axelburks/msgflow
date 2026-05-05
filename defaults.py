@@ -4,6 +4,9 @@ CONFIG_DEFAULTS = {
     "sms": {
         "strategy": "until_success",
     },
+    "notify": {
+        "strategy": "until_success",
+    },
     "alarm": {
         "strategy": "until_success",
     },
@@ -43,6 +46,20 @@ CONFIG_DEFAULTS = {
                     "$alarm": "timeSensitive"
                 },
             },
+            "notify": {
+                "payload": {
+                    "title": {
+                        "$default": "{{receiver}}: {{title}}",
+                    },
+                    "body": {
+                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
+                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                    "copy": {
+                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                },
+            },
         },
         "pushgo": {
             "logmarker": "🌸",
@@ -59,7 +76,18 @@ CONFIG_DEFAULTS = {
                     "$code": "{{receiver}} <- {{sender}}  \n{{text}}  \n{{source}} - {{time_str}}",
                     "$alarm": "{{msg}}  \n  \n{{traceback}}"
                 },
-            }
+            },
+            "notify": {
+                "payload": {
+                    "title": {
+                        "$default": "{{receiver}}: {{title}}",
+                    },
+                    "body": {
+                        "$default": "{{subtitle}}  \n{{body}}  \n{{source}} - {{time_str}}",
+                        "$code": "{{receiver}}: {{text}}  \n{{source}} - {{time_str}}",
+                    },
+                },
+            },
         },
         "tgbot": {
             "logmarker": "🤖",
@@ -75,6 +103,14 @@ CONFIG_DEFAULTS = {
                     "is_disabled": True
                 }
             },
+            "notify": {
+                "payload": {
+                    "text": {
+                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                        "$code": "🌀 {{code}}\n{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                },
+            },
         },
         "lark": {
             "logmarker": "📘",
@@ -86,7 +122,13 @@ CONFIG_DEFAULTS = {
             },
             "success_json": {
                 "code": 0,
-            }
+            },
+            "notify": {
+                "payload": {
+                    "$default": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"blue\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}}",
+                    "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"验证码\\n{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}",
+                },
+            },
         },
         "notification": {
             "logmarker": "🔔",
@@ -111,7 +153,21 @@ CONFIG_DEFAULTS = {
                     "$code": 1,
                     "$alarm": 0
                 }
-            }
+            },
+            "notify": {
+                "payload": {
+                    "title": {
+                        "$default": "{{receiver}}: {{title}}",
+                    },
+                    "body": {
+                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
+                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                    "copy": {
+                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                },
+            },
         }
     }
 }

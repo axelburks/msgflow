@@ -1,0 +1,61 @@
+[
+  {
+    "sender": "com.apple.MobileSMS",
+    "receiver": "Messages",
+    "title": "10086",
+    "subtitle": "",
+    "body": "验证码：123456，您正在登录中国移动，5分钟内有效，请勿泄露。",
+    "text": "10086\n验证码：123456，您正在登录中国移动，5分钟内有效，请勿泄露。",
+    "code_expected": "123456"
+  },
+  {
+    "sender": "com.tencent.xinWeChat",
+    "receiver": "WeChat",
+    "title": "微信",
+    "subtitle": "工作群",
+    "body": "张三: 明天早上10点开会，请准时参加。",
+    "text": "微信\n工作群\n张三: 明天早上10点开会，请准时参加。"
+  },
+  {
+    "sender": "com.apple.mail",
+    "receiver": "Mail",
+    "title": "Apple",
+    "subtitle": "no-reply@apple.com",
+    "body": "Your Apple ID verification code is 748291. Do not share this code with anyone.",
+    "text": "Apple\nno-reply@apple.com\nYour Apple ID verification code is 748291. Do not share this code with anyone.",
+    "code_expected": "748291"
+  },
+  {
+    "sender": "me.fin.bark",
+    "receiver": "Bark",
+    "title": "服务器告警",
+    "subtitle": "prod-api-01",
+    "body": "CPU 使用率已连续 5 分钟超过 95%，请及时处理。",
+    "text": "服务器告警\nprod-api-01\nCPU 使用率已连续 5 分钟超过 95%，请及时处理。"
+  },
+  {
+    "sender": "com.electron.lark",
+    "receiver": "Lark",
+    "title": "飞书",
+    "subtitle": "Bob",
+    "body": "你的动态验证码为 936241，请于 10 分钟内完成验证。",
+    "text": "飞书\nBob\n你的动态验证码为 936241，请于 10 分钟内完成验证。",
+    "code_expected": "936241"
+  },
+  {
+    "sender": "com.apple.reminders",
+    "receiver": "Reminders",
+    "title": "提醒事项",
+    "subtitle": "",
+    "body": "今天 21:05 运动",
+    "text": "提醒事项\n今天 21:05 运动"
+  },
+  {
+    "sender": "com.github.desktop",
+    "receiver": "GitHub Desktop",
+    "title": "GitHub",
+    "subtitle": "octocat/hello-world",
+    "body": "New pull request: \"Fix typo in README\" opened by @someone",
+    "text": "GitHub\noctocat/hello-world\nNew pull request: \"Fix typo in README\" opened by @someone"
+  }
+]
