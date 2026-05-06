@@ -22,23 +22,47 @@ class LiteDB(object):
         if not os.path.exists(db_file):
             raise FileNotFoundError(f"db not found: {db_file}")
         self.db_file = db_file
+        self._conn: sqlite3.Connection | None = None
 
     def _connect(self) -> sqlite3.Connection:
-        # Open a fresh read-only connection per call. Row factory is set to
-        # sqlite3.Row so rows can be converted to plain dicts cheaply.
+        # Keep a single read-only connection per LiteDB instance so frequent
+        # poll ticks don't pay connection setup cost every time.
+        if self._conn is not None:
+            return self._conn
+
         uri = f"file:{self.db_file}?mode=ro"
-        conn = sqlite3.connect(uri, uri=True)
+        conn = sqlite3.connect(uri, uri=True, isolation_level=None)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only = ON")
+        self._conn = conn
         return conn
 
-    def select(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
-        # Execute a parameterized SELECT and return rows as a list of dicts.
-        # Connection is opened/closed per call on purpose: short-lived
-        # connections avoid holding resources and play nicely with the
-        # system process doing concurrent WAL writes.
-        conn = self._connect()
+    def _disconnect(self) -> None:
+        if self._conn is None:
+            return
         try:
-            rows = conn.execute(sql, params).fetchall()
+            self._conn.close()
         finally:
-            conn.close()
+            self._conn = None
+
+    def select(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+        try:
+            conn = self._connect()
+            rows = conn.execute(sql, params).fetchall()
+        except sqlite3.Error:
+            # Long-lived read-only connections can occasionally go stale if the
+            # system rotates the DB or SQLite surfaces a transient error. Drop
+            # the handle and retry once with a fresh connection.
+            self._disconnect()
+            conn = self._connect()
+            rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
+
+    def close(self) -> None:
+        self._disconnect()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        finally:
+            pass
