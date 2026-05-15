@@ -60,6 +60,7 @@ from .controls import (
     hover_symbol_button_width,
     make_hover_symbol_button,
 )
+from .i18n import query_help_text, t
 
 
 class AppCommandWebView(WKWebView):
@@ -75,49 +76,6 @@ class AppCommandWebView(WKWebView):
 class PanelBorderOverlay(NSView):
     def hitTest_(self, _point):  # type: ignore[override]
         return None
-
-
-QUERY_HELP_TEXT = (
-    "About\n"
-    "  Filter the run-record list with a query DSL.\n"
-    "  Bare words search the `text` field. Field clauses use `field:value`.\n"
-    "  Spaces mean AND; use parentheses to group conditions.\n"
-    "\n"
-    "Boolean logic\n"
-    "  a b  -  a AND b\n"
-    "  a | b, a OR b  -  a OR b\n"
-    "  -a, !a, NOT a  -  exclude a\n"
-    "  kind:sms (status:failed | status:success)  -  grouped logic\n"
-    "\n"
-    "Field operators\n"
-    "  text:hello  -  contains hello\n"
-    "  text:=hello  -  exact equals hello\n"
-    "  text:~hello.*  -  regex match\n"
-    "  text:!hello  -  does not contain hello\n"
-    "  text:!=hello  -  not equals hello\n"
-    "  text:!~^debug  -  regex does not match\n"
-    "\n"
-    "Field groups\n"
-    "  status:(failed | success)  -  same as status:failed OR status:success\n"
-    "  text:(\"hello world\" | 验证码)  -  OR values in the same field\n"
-    "  status:(=failed | !=success | !~debug)  -  operator shorthand\n"
-    "\n"
-    "Quotes and escaping\n"
-    "  Quote spaces or DSL symbols: text:\"a | b\", text:'hello (test)'\n"
-    "  Bare values use \\ to escape one char: alice\\ bob, a\\|b\n"
-    "  Quote regex for readability: code:~'\\d+', text:~'(验证码|code)\\d{6}'\n"
-    "\n"
-    "Available fields (all operators above supported)\n"
-    "  " + ", ".join(FIELD_MAP.keys()) + "\n"
-    "\n"
-    "Examples\n"
-    "  hello  -  search hello in text\n"
-    "  sender:+86 status:failed  -  sender has +86 AND run failed\n"
-    "  kind:sms -(sender:bot | text:debug)  -  sms excluding bot/debug\n"
-    "  trigger:!auto code:~'\\d{6}'  -  non-auto runs with a 6-digit code\n"
-    "  trace:'\"dest\":\"bark_axel\"'  -  trace json mentions dest bark_axel\n"
-    "  msg:!~^debug kind:sms  -  sms whose msg does NOT start with debug"
-)
 
 
 class PaddedTextFieldCell(NSTextFieldCell):
@@ -347,11 +305,11 @@ class MainWindowController(NSObject):
     PANEL_BORDER_WIDTH = 0.65
     PANEL_CONTENT_INSET = 1.0
     ACTION_BUTTON_SPECS = {
-        "rematch_button": ("Rematch", "rematchAction:", "arrow.trianglehead.swap", "Rematch selected message and send it again", "purple", 112.0, ACTION_BUTTON_GAP),
-        "resend_button": ("Resend", "resendAction:", "paperplane", "Resend the selected run to one destination", "green", 104.0, ACTION_BUTTON_GAP),
-        "delete_button": ("Delete", "deleteAction:", "trash", "Delete the selected run record", "red", 96.0, ACTION_GROUP_GAP),
-        "cursor_button": ("Cursor", "editCursorAction:", "arrow.up.to.line.circle", "Edit per-kind destination cursors", "blue", 96.0, ACTION_BUTTON_GAP),
-        "config_button": ("Config", "showConfigAction:", "gearshape", "View the effective built config", "neutral", 96.0, 0.0),
+        "rematch_button": ("toolbar.rematch", "rematchAction:", "arrow.trianglehead.swap", "toolbar.rematch_tip", "purple", 112.0, ACTION_BUTTON_GAP),
+        "resend_button": ("toolbar.resend", "resendAction:", "paperplane", "toolbar.resend_tip", "green", 104.0, ACTION_BUTTON_GAP),
+        "delete_button": ("toolbar.delete", "deleteAction:", "trash", "toolbar.delete_tip", "red", 96.0, ACTION_GROUP_GAP),
+        "cursor_button": ("toolbar.cursor", "editCursorAction:", "arrow.up.to.line.circle", "toolbar.cursor_tip", "blue", 96.0, ACTION_BUTTON_GAP),
+        "config_button": ("toolbar.config", "showConfigAction:", "gearshape", "toolbar.config_tip", "neutral", 96.0, 0.0),
     }
     AUTO_LOAD_THRESHOLD = 120.0
     TAG_LINE1_LEFT = 101
@@ -486,21 +444,21 @@ class MainWindowController(NSObject):
         self.button_tooltip = FloatingTooltipController.alloc().init()
         filter_layout = self._filter_layout_for_content_bounds(content.bounds())
         self.refresh_button = self._symbol_button(
-            "Refresh",
+            t("toolbar.refresh"),
             filter_layout["refresh_x"],
             filter_y,
             self.FILTER_REFRESH_WIDTH,
             "refreshAction:",
             "arrow.clockwise",
-            "Refresh records",
+            t("toolbar.refresh_tip"),
         )
         self.kind_tabs = FilterSegmentedControl.alloc().initWithFrame_(
             NSMakeRect(filter_layout["kind_x"], filter_y, self.FILTER_KIND_WIDTH, self.CONTROL_HEIGHT)
         )
         self.kind_tabs.setSegmentCount_(3)
-        self.kind_tabs.setLabel_forSegment_("All", 0)
-        self.kind_tabs.setLabel_forSegment_("SMS", 1)
-        self.kind_tabs.setLabel_forSegment_("Notify", 2)
+        self.kind_tabs.setLabel_forSegment_(t("filter.all_kind"), 0)
+        self.kind_tabs.setLabel_forSegment_(t("filter.sms"), 1)
+        self.kind_tabs.setLabel_forSegment_(t("filter.notify"), 2)
         self.kind_tabs.setSelectedSegment_(0)
         self.kind_tabs.setTarget_(self)
         self.kind_tabs.setAction_("kindFilterChanged:")
@@ -522,7 +480,7 @@ class MainWindowController(NSObject):
             NSMakeRect(filter_layout["trigger_x"], filter_y, self.FILTER_TRIGGER_WIDTH, self.CONTROL_HEIGHT),
             False,
         )
-        for item in [self._filter_all_title("Trigger"), *RUN_TRIGGER_TYPES]:
+        for item in [self._filter_all_title("trigger"), *RUN_TRIGGER_TYPES]:
             self.trigger_popup.addItemWithTitle_(item)
         self.trigger_popup.setTarget_(self)
         self.trigger_popup.setAction_("filterSelectionChanged:")
@@ -537,7 +495,7 @@ class MainWindowController(NSObject):
             ),
             False,
         )
-        for item in [self._filter_all_title("Status"), *RUN_STATUSES]:
+        for item in [self._filter_all_title("status"), *RUN_STATUSES]:
             self.status_popup.addItemWithTitle_(item)
         self.status_popup.setTarget_(self)
         self.status_popup.setAction_("filterSelectionChanged:")
@@ -550,7 +508,7 @@ class MainWindowController(NSObject):
         self.query_field.setStringValue_("")
         self._set_filter_placeholder(
             self.query_field,
-            "Filter records - hover ? for syntax. Press Enter to apply.",
+            t("filter.placeholder"),
         )
         self.query_field.setTarget_(self)
         self.query_field.setAction_("queryFieldSubmitted:")
@@ -561,7 +519,7 @@ class MainWindowController(NSObject):
             NSMakeRect(help_x, help_y, self.FILTER_HELP_WIDTH, self.FILTER_HELP_WIDTH)
         )
         help_image = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
-            "questionmark.circle", "Query syntax help"
+            "questionmark.circle", t("filter.query_help_accessibility")
         )
         if help_image is not None:
             try:
@@ -577,7 +535,7 @@ class MainWindowController(NSObject):
         self.query_error_tooltip = FloatingTooltipController.alloc().init()
         clear_x = filter_layout["clear_x"]
         self.clear_filters_button = self._symbol_button(
-            "Reset", clear_x, filter_y, self.FILTER_CLEAR_WIDTH, "resetFiltersAction:", "xmark", "Reset filters"
+            t("toolbar.reset"), clear_x, filter_y, self.FILTER_CLEAR_WIDTH, "resetFiltersAction:", "xmark", t("toolbar.reset_tip")
         )
         filter_layout = self._filter_layout_for_content_bounds(content.bounds())
         self.refresh_button.setFrame_(
@@ -652,7 +610,7 @@ class MainWindowController(NSObject):
         self.detail_panel.addSubview_(self.detail_web_view)
         self.detail_border_overlay = self._panel_border_overlay(self.detail_panel.bounds())
         self.detail_panel.addSubview_(self.detail_border_overlay)
-        self._render_detail_payload({"message": "No selection"})
+        self._render_detail_payload({"message": t("run.no_selection")})
 
     @objc.python_method
     def _style_panel_view(self, view, draw_border: bool = True, clips_contents: bool = False) -> None:
@@ -814,8 +772,8 @@ class MainWindowController(NSObject):
 
     @objc.python_method
     def _action_symbol_button(self, attr: str, y: float):
-        title, action, symbol, tooltip, hover_color, fallback_width = self.ACTION_BUTTON_SPECS[attr][:6]
-        return self._symbol_button(title, 0, y, fallback_width, action, symbol, tooltip, hover_color)
+        title_key, action, symbol, tooltip_key, hover_color, fallback_width = self.ACTION_BUTTON_SPECS[attr][:6]
+        return self._symbol_button(t(title_key), 0, y, fallback_width, action, symbol, t(tooltip_key), hover_color)
 
     @objc.python_method
     def _layout_action_buttons(self, bounds) -> None:
@@ -846,9 +804,9 @@ class MainWindowController(NSObject):
             self.selected_message_detail = None
             self._is_loading_more = False
             self.table_view.reloadData()
-            self._render_detail_payload({"message": "No selection"})
+            self._render_detail_payload({"message": t("run.no_selection")})
         except Exception as e:
-            self._render_detail_payload({"error": f"Failed to load runs: {e}"})
+            self._render_detail_payload({"error": t("run.failed_load", error=e)})
 
     def loadMoreAction_(self, _sender) -> None:
         self._load_more_runs()
@@ -910,15 +868,15 @@ class MainWindowController(NSObject):
             payload = core_client.get_cursor_state(self.kind_filter)
             items = list(payload.get("items") or [])
             if not items:
-                self._show_error("No cursor destinations found.")
+                self._show_error(t("alert.no_cursor_destinations"))
                 return
             alert = NSAlert.alloc().init()
-            alert.setMessageText_("Edit Cursor")
-            alert.setInformativeText_("Changes stay local in this sheet until you click Apply.")
+            alert.setMessageText_(t("alert.edit_cursor_title"))
+            alert.setInformativeText_(t("alert.edit_cursor_detail"))
             accessory_view, rows = self._build_cursor_accessory_view(items)
             alert.setAccessoryView_(accessory_view)
-            alert.addButtonWithTitle_("Apply")
-            alert.addButtonWithTitle_("Cancel")
+            alert.addButtonWithTitle_(t("action.apply"))
+            alert.addButtonWithTitle_(t("action.cancel"))
             self._cursor_sheet_rows = rows
             alert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_(
                 self.window,
@@ -932,15 +890,15 @@ class MainWindowController(NSObject):
     def rematchAction_(self, _sender) -> None:
         current = self._current_item()
         if current is None:
-            self._show_error("Please select a run first.")
+            self._show_error(t("alert.no_selection"))
             return
         alert = self._confirmation_alert(
-            "Rematch selected message?",
+            t("alert.rematch_title"),
             (
                 f"{self._selected_run_summary(current)}\n\n"
-                "This will match the original message with the current runtime config and send it again."
+                f"{t('alert.rematch_detail')}"
             ),
-            "Rematch",
+            t("action.rematch"),
         )
         alert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_(
             self.window,
@@ -953,21 +911,21 @@ class MainWindowController(NSObject):
         current = self._current_item()
         selected_run = self._selected_run_record()
         if current is None or selected_run is None:
-            self._show_error("Please select a run first.")
+            self._show_error(t("alert.no_selection"))
             return
         options = self._collect_dest_options(selected_run)
         if not options:
-            self._show_error("No destinations available in the selected run.")
+            self._show_error(t("alert.no_destinations"))
             return
         popup = NSPopUpButton.alloc().initWithFrame_pullsDown_(NSMakeRect(0, 0, 360, 28), False)
         for rule_name, dest_name in options:
             popup.addItemWithTitle_(f"{rule_name} -> {dest_name}")
         alert = NSAlert.alloc().init()
-        alert.setMessageText_("Select destination to resend")
-        alert.setInformativeText_("The selected destination will be resent with the current runtime config.")
+        alert.setMessageText_(t("alert.resend_title"))
+        alert.setInformativeText_(t("alert.resend_detail"))
         alert.setAccessoryView_(popup)
-        alert.addButtonWithTitle_("Resend")
-        alert.addButtonWithTitle_("Cancel")
+        alert.addButtonWithTitle_(t("action.resend"))
+        alert.addButtonWithTitle_(t("action.cancel"))
         self._resend_sheet_popup = popup
         self._resend_sheet_options = options
         alert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_(
@@ -980,15 +938,15 @@ class MainWindowController(NSObject):
     def deleteAction_(self, _sender) -> None:
         current = self._current_item()
         if current is None:
-            self._show_error("Please select a run first.")
+            self._show_error(t("alert.no_selection"))
             return
         alert = self._confirmation_alert(
-            "Delete selected run?",
+            t("alert.delete_title"),
             (
                 f"{self._selected_run_summary(current)}\n\n"
-                "This permanently removes the selected run record from local history."
+                f"{t('alert.delete_detail')}"
             ),
-            "Delete",
+            t("action.delete"),
         )
         alert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_(
             self.window,
@@ -1003,7 +961,7 @@ class MainWindowController(NSObject):
         alert.setMessageText_(title)
         alert.setInformativeText_(detail)
         alert.addButtonWithTitle_(confirm_title)
-        alert.addButtonWithTitle_("Cancel")
+        alert.addButtonWithTitle_(t("action.cancel"))
         return alert
 
     @objc.python_method
@@ -1013,9 +971,14 @@ class MainWindowController(NSObject):
         status = item.get("status") or ""
         created_at = item.get("created_at_str") or ""
         text_preview = (item.get("text_preview") or "").replace("\n", " ").strip()
-        summary = f"Run ID: {run_id}\nMessage ID: {message_id}\nStatus: {status}\nCreated: {created_at}"
+        summary = (
+            f"{t('run.run_id')}: {run_id}\n"
+            f"{t('run.message_id')}: {message_id}\n"
+            f"{t('run.status')}: {status}\n"
+            f"{t('run.created')}: {created_at}"
+        )
         if text_preview:
-            summary += f"\nMessage: {text_preview}"
+            summary += f"\n{t('run.message')}: {text_preview}"
         return summary
 
     @objc.python_method
@@ -1023,7 +986,7 @@ class MainWindowController(NSObject):
         try:
             result = core_client.rematch_and_send(message_id)
             self.refresh_data()
-            self._show_run_action_result("Rematch", result)
+            self._show_run_action_result(t("action.rematch"), result)
         except Exception as e:
             self._show_error(str(e))
 
@@ -1055,7 +1018,7 @@ class MainWindowController(NSObject):
         if row < 0 or row >= len(self.run_items):
             self.selected_row = -1
             self.selected_message_detail = None
-            self._render_detail_payload({"message": "No selection"})
+            self._render_detail_payload({"message": t("run.no_selection")})
             return
         self.selected_row = row
         item = self.run_items[row]
@@ -1063,13 +1026,13 @@ class MainWindowController(NSObject):
             self.selected_message_detail = core_client.get_message_detail(int(item["message_id"]))
             self._render_selected_detail()
         except Exception as e:
-            self._render_detail_payload({"error": f"Failed to load detail: {e}"})
+            self._render_detail_payload({"error": t("run.failed_detail", error=e)})
 
     @objc.python_method
     def _render_selected_detail(self) -> None:
         current = self._current_item()
         if self.selected_message_detail is None or current is None:
-            self._render_detail_payload({"message": "No selection"})
+            self._render_detail_payload({"message": t("run.no_selection")})
             return
         selected_run = self._selected_run_record()
         detail = {
@@ -1122,19 +1085,20 @@ class MainWindowController(NSObject):
 
     @objc.python_method
     def _filter_all_title(self, prefix: str) -> str:
-        return f"{prefix}: All"
+        prefix_key = "filter.trigger" if prefix.lower() == "trigger" else "filter.status"
+        return t("filter.all_title", prefix=t(prefix_key))
 
     @objc.python_method
     def _selected_trigger_filter(self) -> str | None:
         title = str(self.trigger_popup.titleOfSelectedItem() or "")
-        if title == self._filter_all_title("Trigger"):
+        if title == self._filter_all_title("trigger"):
             return None
         return title
 
     @objc.python_method
     def _selected_status_filter(self) -> str | None:
         title = str(self.status_popup.titleOfSelectedItem() or "")
-        if title == self._filter_all_title("Status"):
+        if title == self._filter_all_title("status"):
             return None
         return title
 
@@ -1161,12 +1125,12 @@ class MainWindowController(NSObject):
                 self.app_controller.restart_managed_core()
             payload = core_client.get_built_config()
             built_cfg = payload.get("built_cfg") or {}
-            self.config_window.setTitle_(f"Built Config - {payload.get('config_file_path') or ''}")
+            self.config_window.setTitle_(f"{t('config.built_title')} - {payload.get('config_file_path') or ''}")
             self._render_config_payload(built_cfg)
             if reload_from_disk:
                 self.refresh_data()
         except Exception as e:
-            self._render_config_payload({"error": f"Failed to load built config: {e}"})
+            self._render_config_payload({"error": t("config.reload_error", error=e)})
             self._show_error(str(e))
 
     @objc.python_method
@@ -1185,12 +1149,12 @@ class MainWindowController(NSObject):
             NSBackingStoreBuffered,
             False,
         )
-        self.config_window.setTitle_("Built Config")
+        self.config_window.setTitle_(t("config.built_title"))
         self.config_window.setReleasedWhenClosed_(False)
         content = self.config_window.contentView()
         padding = self.CONFIG_WINDOW_PADDING
         button_y = self.CONFIG_WINDOW_HEIGHT - padding - self.CONTROL_HEIGHT
-        self.config_reload_button = self._button("Reload", padding, button_y, 92.0, "reloadConfigAction:")
+        self.config_reload_button = self._button(t("action.reload"), padding, button_y, 92.0, "reloadConfigAction:")
         self.config_reload_button.setAutoresizingMask_(NSViewMinYMargin)
         content.addSubview_(self.config_reload_button)
         config = WKWebViewConfiguration.alloc().init()
@@ -1233,9 +1197,9 @@ class MainWindowController(NSObject):
         document_view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, total_height))
         header_y = total_height - header_height
         for header_text, header_x, header_w in (
-            ("Kind", kind_x, kind_width),
-            ("Destination", dest_x, dest_width),
-            ("Cursor", field_x, field_width),
+            (t("cursor.column.kind"), kind_x, kind_width),
+            (t("cursor.column.destination"), dest_x, dest_width),
+            (t("cursor.column.cursor"), field_x, field_width),
         ):
             header_label = self._label(
                 NSMakeRect(header_x, header_y + 2, header_w, 18),
@@ -1538,7 +1502,7 @@ class MainWindowController(NSObject):
         try:
             result = core_client.resend_destination(int(contextInfo), selected_rule, selected_dest)
             self.refresh_data()
-            self._show_run_action_result("Resend", result)
+            self._show_run_action_result(t("action.resend"), result)
         except Exception as e:
             self._show_error(str(e))
 
@@ -1558,7 +1522,7 @@ class MainWindowController(NSObject):
             for kind, dest_name, field in self._cursor_sheet_rows:
                 raw_value = str(field.stringValue() or "").strip()
                 if not raw_value:
-                    raise ValueError(f"cursor for '{dest_name}' ({kind}) cannot be empty")
+                    raise ValueError(t("cursor.empty_error", destination=dest_name, kind=kind))
                 per_kind.setdefault(kind, {})[dest_name] = float(raw_value)
             for kind, cursor_map in per_kind.items():
                 if cursor_map:
@@ -1668,7 +1632,7 @@ class MainWindowController(NSObject):
     @objc.python_method
     def _show_error(self, text: str) -> None:
         alert = NSAlert.alloc().init()
-        alert.setMessageText_("Error")
+        alert.setMessageText_(t("alert.error_title"))
         alert.setInformativeText_(text)
         alert.runModal()
 
@@ -1676,7 +1640,8 @@ class MainWindowController(NSObject):
     def _show_query_help_tooltip(self) -> None:
         if self.query_help_tooltip is None or self.query_help_icon is None:
             return
-        self.query_help_tooltip.show_from_view(self.query_help_icon, QUERY_HELP_TEXT, max_width=420.0)
+        fields = ", ".join(FIELD_MAP.keys())
+        self.query_help_tooltip.show_from_view(self.query_help_icon, query_help_text(fields), max_width=420.0)
 
     @objc.python_method
     def _hide_query_help_tooltip(self) -> None:
@@ -1710,7 +1675,7 @@ class MainWindowController(NSObject):
         status = str(payload.get("status") or "").strip().lower()
         run_id = payload.get("run_id")
         title = f"{action_name}"
-        detail = f"{action_name} Status: {status}\nRun ID: {run_id}"
+        detail = t("run_action.status", action=action_name, status=status, run_id=run_id)
         alert = NSAlert.alloc().init()
         alert.setMessageText_(title)
         alert.setInformativeText_(detail)

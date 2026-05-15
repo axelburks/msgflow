@@ -44,7 +44,12 @@ from .accessibility import (
 )
 
 
-from .controls import FloatingTooltipController, hover_button_color, make_hover_symbol_button
+from .controls import (
+    FloatingTooltipController,
+    hover_button_color,
+    make_hover_symbol_button,
+)
+from .i18n import t
 
 
 class FloatingPanelController(NSObject):
@@ -216,7 +221,7 @@ class FloatingPanelController(NSObject):
         content_view.addSubview_(self.header_divider)
 
         self.type_button = make_hover_symbol_button(
-            "Type", 0, 0, 40, 27, self, "typeAction:", "keyboard", "Type",
+            t("action.type"), 0, 0, 40, 27, self, "typeAction:", "keyboard", t("action.type"),
             hover_color=hover_button_color("blue"),
             tooltip_controller=self.tooltip_controller,
             symbol_size=18.0,
@@ -226,7 +231,7 @@ class FloatingPanelController(NSObject):
         content_view.addSubview_(self.type_button)
 
         self.paste_button = make_hover_symbol_button(
-            "Paste", 0, 0, 40, 27, self, "pasteAction:", "doc.on.doc", "Paste",
+            t("action.paste"), 0, 0, 40, 27, self, "pasteAction:", "doc.on.doc", t("action.paste"),
             hover_color=hover_button_color("green"),
             tooltip_controller=self.tooltip_controller,
             symbol_size=18.0,
@@ -236,7 +241,7 @@ class FloatingPanelController(NSObject):
         content_view.addSubview_(self.paste_button)
 
         self.close_button = make_hover_symbol_button(
-            "Close", 0, 0, 40, 27, self, "closeAction:", "xmark", "Close",
+            t("action.close"), 0, 0, 40, 27, self, "closeAction:", "xmark", t("action.close"),
             hover_color=hover_button_color("red"),
             tooltip_controller=self.tooltip_controller,
             symbol_size=16.0,
@@ -492,14 +497,14 @@ class FloatingPanelController(NSObject):
             line.strip() for line in self.current_input.splitlines() if line.strip()
         )
         quoted_preview = f'"{preview_text}"' if preview_text else ""
-        type_text = f"Type {quoted_preview}".strip()
-        paste_text = f"Paste {quoted_preview}".strip()
+        type_text = f"{t('action.type')} {quoted_preview}".strip()
+        paste_text = f"{t('action.paste')} {quoted_preview}".strip()
         if self.type_button is not None:
             self.type_button.set_hover_text(type_text)
         if self.paste_button is not None:
             self.paste_button.set_hover_text(paste_text)
         if self.close_button is not None:
-            self.close_button.set_hover_text("Close")
+            self.close_button.set_hover_text(t("action.close"))
 
     @objc.python_method
     def _panel_frame(self, width: float, height: float):

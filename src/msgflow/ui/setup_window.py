@@ -16,6 +16,7 @@ from Foundation import NSObject, NSTimer
 
 from ..common.authorization import full_disk_access_authorized
 from .accessibility import accessibility_authorized, request_accessibility_authorization
+from .i18n import t
 
 
 class SetupWindowController(NSObject):
@@ -35,6 +36,11 @@ class SetupWindowController(NSObject):
         self.accessibility_button = None
         self.full_disk_button = None
         self.continue_button = None
+        self.accessibility_title_label = None
+        self.accessibility_description_label = None
+        self.accessibility_note_label = None
+        self.full_disk_title_label = None
+        self.full_disk_description_label = None
         self.poll_timer = None
         self._build_window()
         self.refresh_permissions()
@@ -107,7 +113,7 @@ class SetupWindowController(NSObject):
             NSBackingStoreBuffered,
             False,
         )
-        self.window.setTitle_("msgflow Setup")
+        self.window.setTitle_(t("setup.window_title"))
         self.window.setDelegate_(self)
         content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
         content.setWantsLayer_(True)
@@ -117,7 +123,7 @@ class SetupWindowController(NSObject):
         self.window.setContentView_(content)
 
         self.title_label = self._label(
-            "Set Up msgflow",
+            t("setup.title"),
             28,
             360,
             504,
@@ -127,7 +133,7 @@ class SetupWindowController(NSObject):
         )
         content.addSubview_(self.title_label)
         self.subtitle_label = self._label(
-            "Grant these permissions, then continue. This screen updates automatically.",
+            t("setup.subtitle"),
             28,
             332,
             504,
@@ -140,26 +146,31 @@ class SetupWindowController(NSObject):
         self._add_permission_section(
             content,
             y=206,
-            title="Accessibility",
-            description="Allows msgflow to show floating actions and type or paste into other apps.",
-            note="Already enabled but still not granted? Remove the old entry, then click Grant again.",
-            button_title="Grant",
+            title=t("setup.accessibility_title"),
+            description=t("setup.accessibility_desc"),
+            note=t("setup.accessibility_note"),
+            button_title=t("action.grant"),
             action="grantAccessibilityAction:",
             status_attr="accessibility_status_label",
             button_attr="accessibility_button",
+            title_attr="accessibility_title_label",
+            description_attr="accessibility_description_label",
+            note_attr="accessibility_note_label",
         )
         self._add_permission_section(
             content,
             y=94,
-            title="Full Disk Access",
-            description="Allows msgflow to read Messages and Notifications so it can monitor new items.",
-            button_title="Grant",
+            title=t("setup.full_disk_title"),
+            description=t("setup.full_disk_desc"),
+            button_title=t("action.grant"),
             action="grantFullDiskAccessAction:",
             status_attr="full_disk_status_label",
             button_attr="full_disk_button",
+            title_attr="full_disk_title_label",
+            description_attr="full_disk_description_label",
         )
 
-        self.continue_button = self._button("Continue", 420, 28, 112, "continueAction:")
+        self.continue_button = self._button(t("action.continue"), 420, 28, 112, "continueAction:")
         self.continue_button.setEnabled_(False)
         content.addSubview_(self.continue_button)
 
@@ -175,7 +186,10 @@ class SetupWindowController(NSObject):
         action: str,
         status_attr: str,
         button_attr: str,
+        title_attr: str,
+        description_attr: str,
         note: str | None = None,
+        note_attr: str | None = None,
     ) -> None:
         card_height = 116.0 if note else 96.0
         card = NSView.alloc().initWithFrame_(NSMakeRect(28, y, 504, card_height))
@@ -198,6 +212,7 @@ class SetupWindowController(NSObject):
             NSColor.labelColor(),
         )
         card.addSubview_(title_label)
+        setattr(self, title_attr, title_label)
         description_label = self._label(
             description,
             16,
@@ -209,6 +224,7 @@ class SetupWindowController(NSObject):
         )
         description_label.setLineBreakMode_(0)
         card.addSubview_(description_label)
+        setattr(self, description_attr, description_label)
         if note:
             note_label = self._label(
                 note,
@@ -221,8 +237,10 @@ class SetupWindowController(NSObject):
             )
             note_label.setLineBreakMode_(0)
             card.addSubview_(note_label)
+            if note_attr is not None:
+                setattr(self, note_attr, note_label)
         status_label = self._label(
-            "Checking...",
+            t("setup.checking"),
             344,
             card_height - 38,
             140,
@@ -260,11 +278,11 @@ class SetupWindowController(NSObject):
     @objc.python_method
     def _set_permission_status(self, label, button, granted: bool) -> None:
         if granted:
-            label.setStringValue_("Granted")
+            label.setStringValue_(t("setup.granted"))
             label.setTextColor_(NSColor.systemGreenColor())
             button.setEnabled_(False)
             return
-        label.setStringValue_("Needs Permission")
+        label.setStringValue_(t("setup.needs_permission"))
         label.setTextColor_(NSColor.systemOrangeColor())
         button.setEnabled_(True)
 

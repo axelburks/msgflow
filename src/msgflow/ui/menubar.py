@@ -17,6 +17,7 @@ from AppKit import (
 from Foundation import NSObject, NSURL
 
 from ..rpc import core_client
+from .i18n import LANGUAGE_NAMES, SUPPORTED_LANGUAGES, current_language, t
 
 
 class MenuBarController(NSObject):
@@ -30,29 +31,46 @@ class MenuBarController(NSObject):
         self._configure_status_button()
         self.menu = NSMenu.alloc().init()
         self.menu.setDelegate_(self)
-        self.status_menu_item = self._item("Status: ...", None, "circle")
+        self.status_menu_item = self._item(t("menu.status", status="..."), None, "circle")
         self.status_menu_item.setEnabled_(False)
         self.menu.addItem_(self.status_menu_item)
         self.menu.addItem_(NSMenuItem.separatorItem())
 
-        self.toggle_menu_item = self._item("Start", "toggleListenerAction:", "play.circle")
+        self.toggle_menu_item = self._item(t("menu.start"), "toggleListenerAction:", "play.circle")
         self.menu.addItem_(self.toggle_menu_item)
-        self.menu.addItem_(self._item("Open Window", "openWindowAction:", "macwindow"))
+        self.open_window_menu_item = self._item(t("menu.open_window"), "openWindowAction:", "macwindow")
+        self.menu.addItem_(self.open_window_menu_item)
         self.menu.addItem_(NSMenuItem.separatorItem())
 
-        self.menu.addItem_(self._item("Reload Config", "reloadConfigAction:", "arrow.clockwise"))
-        self.menu.addItem_(self._item("Open Config Folder", "openConfigFolderAction:", "folder"))
+        self.reload_config_menu_item = self._item(t("menu.reload_config"), "reloadConfigAction:", "arrow.clockwise")
+        self.menu.addItem_(self.reload_config_menu_item)
+        self.open_config_folder_menu_item = self._item(t("menu.open_config_folder"), "openConfigFolderAction:", "folder")
+        self.menu.addItem_(self.open_config_folder_menu_item)
         self.menu.addItem_(NSMenuItem.separatorItem())
 
-        self.accessibility_menu_item = self._item("Permissions...", "grantAccessibilityAction:", "hand.raised")
+        self.language_menu_item = self._item(t("menu.language"), None, "globe")
+        self.language_submenu = NSMenu.alloc().initWithTitle_(t("menu.language"))
+        self.language_menu_item.setSubmenu_(self.language_submenu)
+        self.language_menu_items = {}
+        for language in SUPPORTED_LANGUAGES:
+            item = self._item(LANGUAGE_NAMES[language], "languageAction:", None)
+            item.setRepresentedObject_(language)
+            self.language_submenu.addItem_(item)
+            self.language_menu_items[language] = item
+        self.menu.addItem_(self.language_menu_item)
+        self.menu.addItem_(NSMenuItem.separatorItem())
+
+        self.accessibility_menu_item = self._item(t("menu.permissions"), "grantAccessibilityAction:", "hand.raised")
         self.menu.addItem_(self.accessibility_menu_item)
-        self.launch_at_login_menu_item = self._item("Launch at Login", "toggleLaunchAtLoginAction:", "power")
+        self.launch_at_login_menu_item = self._item(t("menu.launch_at_login"), "toggleLaunchAtLoginAction:", "power")
         self.menu.addItem_(self.launch_at_login_menu_item)
-        self.debug_menu_item = self._item("Debug Mode", "toggleDebugModeAction:", "ladybug")
+        self.debug_menu_item = self._item(t("menu.debug_mode"), "toggleDebugModeAction:", "ladybug")
         self.menu.addItem_(self.debug_menu_item)
         self.menu.addItem_(NSMenuItem.separatorItem())
-        self.menu.addItem_(self._item("About msgflow", "showAboutAction:", "info.circle"))
-        self.menu.addItem_(self._item("Quit", "quitAction:", "xmark.circle"))
+        self.about_menu_item = self._item(t("menu.about"), "showAboutAction:", "info.circle")
+        self.menu.addItem_(self.about_menu_item)
+        self.quit_menu_item = self._item(t("menu.quit"), "quitAction:", "xmark.circle")
+        self.menu.addItem_(self.quit_menu_item)
         self.status_item.setMenu_(self.menu)
         self.refresh_status()
         return self
@@ -100,12 +118,16 @@ class MenuBarController(NSObject):
             NSControlStateValueOn if self.app_controller.app_launch_at_login_enabled() else NSControlStateValueOff
         )
         self.accessibility_menu_item.setHidden_(False)
+        language = current_language()
+        for language_code, item in self.language_menu_items.items():
+            item.setState_(NSControlStateValueOn if language_code == language else NSControlStateValueOff)
 
     @objc.python_method
     def _apply_runtime_status(self, status_payload: dict) -> None:
-        status = str(status_payload.get("status") or "unknown")
-        self.status_menu_item.setTitle_(f"Status: {status}")
-        self.toggle_menu_item.setTitle_("Pause" if status == "running" else "Start")
+        status = str(status_payload.get("status") or "").strip().lower() or "unknown"
+        status_text = t(f"runtime_status.{status}", _default=status)
+        self.status_menu_item.setTitle_(t("menu.status", status=status_text))
+        self.toggle_menu_item.setTitle_(t("menu.pause") if status == "running" else t("menu.start"))
         toggle_image = self._symbol_image("pause.circle" if status == "running" else "play.circle")
         if toggle_image is not None:
             self.toggle_menu_item.setImage_(toggle_image)
@@ -113,8 +135,8 @@ class MenuBarController(NSObject):
 
     @objc.python_method
     def _apply_unavailable_status(self) -> None:
-        self.status_menu_item.setTitle_("Status: unavailable")
-        self.toggle_menu_item.setTitle_("Start")
+        self.status_menu_item.setTitle_(t("menu.status_unavailable"))
+        self.toggle_menu_item.setTitle_(t("menu.start"))
         toggle_image = self._symbol_image("play.circle")
         if toggle_image is not None:
             self.toggle_menu_item.setImage_(toggle_image)
@@ -138,8 +160,8 @@ class MenuBarController(NSObject):
     def refresh_status(self) -> None:
         self._refresh_menu_toggles()
         if not self.app_controller.setup_complete():
-            self.status_menu_item.setTitle_("Status: Setup Required")
-            self.toggle_menu_item.setTitle_("Continue Setup")
+            self.status_menu_item.setTitle_(t("menu.status_setup_required"))
+            self.toggle_menu_item.setTitle_(t("menu.continue_setup"))
             toggle_image = self._symbol_image("checklist")
             if toggle_image is not None:
                 self.toggle_menu_item.setImage_(toggle_image)
@@ -188,6 +210,10 @@ class MenuBarController(NSObject):
         self.app_controller.show_permissions()
         self.refresh_status()
 
+    def languageAction_(self, sender) -> None:
+        language = str(sender.representedObject() or "")
+        self.app_controller.set_ui_language(language)
+
     def openWindowAction_(self, _sender) -> None:
         if not self.app_controller.setup_complete():
             self.app_controller.show_setup()
@@ -214,16 +240,16 @@ class MenuBarController(NSObject):
         alert = NSAlert.alloc().init()
         github_url = self._app_project_url("GitHub") or self._app_project_url("Repository")
         info_lines = [
-            f"Version: {self._app_version()}",
-            f"Author: {self._app_author()}",
+            f"{t('about.version')}: {self._app_version()}",
+            f"{t('about.author')}: {self._app_author()}",
         ]
         if github_url:
             info_lines.append(f"GitHub: {github_url}")
         alert.setMessageText_("msgflow")
         alert.setInformativeText_("\n".join(info_lines))
-        alert.addButtonWithTitle_("OK")
+        alert.addButtonWithTitle_(t("action.ok"))
         if github_url:
-            alert.addButtonWithTitle_("Open GitHub")
+            alert.addButtonWithTitle_(t("about.open_github"))
         if github_url and alert.runModal() == NSAlertSecondButtonReturn:
             url = NSURL.URLWithString_(github_url)
             if url is not None:

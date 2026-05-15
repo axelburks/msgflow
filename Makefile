@@ -54,7 +54,7 @@ verify:
 	python3 -m compileall app.py core.py src scripts/release.py
 
 test:
-	$(PYTEST) $(TEST) -q
+	$(PYTEST) $(TEST)
 
 test-verbose:
 	$(PYTEST) $(TEST) -v

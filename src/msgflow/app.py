@@ -6,6 +6,7 @@ import time
 import objc
 from AppKit import (
     NSAlert,
+    NSAlertFirstButtonReturn,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
     NSEventModifierFlagCommand,
@@ -21,6 +22,7 @@ from .common.authorization import FULL_DISK_ACCESS_SETTINGS_URLS
 from .rpc import core_client
 from .ui.accessibility import accessibility_authorized
 from .ui.floating_panel import FloatingPanelController
+from .ui.i18n import t
 from .ui.main_window import MainWindowController
 from .ui.menubar import MenuBarController
 from .ui.notification_center import NotificationPresenter
@@ -33,6 +35,8 @@ from .common.paths import (
     managed_core_command,
     managed_core_environment,
     managed_core_log_path,
+    ui_launch_command,
+    ui_launch_environment,
 )
 from .rpc.ui_rpc import UIRPCServer
 
@@ -239,9 +243,36 @@ class MacAppController(NSObject):
 
     def showErrorOnMainThread_(self, text: str) -> None:
         alert = NSAlert.alloc().init()
-        alert.setMessageText_("Error")
+        alert.setMessageText_(t("alert.error_title"))
         alert.setInformativeText_(text)
         alert.runModal()
+
+    @objc.python_method
+    def set_ui_language(self, language: str) -> None:
+        from .ui.i18n import current_language, normalize_language, set_language
+
+        normalized = normalize_language(language)
+        if normalized == current_language():
+            return
+        set_language(normalized)
+        self._prompt_restart_for_language_change()
+
+    @objc.python_method
+    def _prompt_restart_for_language_change(self) -> None:
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_(t("language.restart_title"))
+        alert.setInformativeText_(t("language.restart_detail"))
+        alert.addButtonWithTitle_(t("action.restart"))
+        alert.addButtonWithTitle_(t("action.later"))
+        if alert.runModal() == NSAlertFirstButtonReturn:
+            self.relaunch_app()
+
+    @objc.python_method
+    def relaunch_app(self) -> None:
+        command = ui_launch_command()
+        logger.info("relaunching app: %s", " ".join(command))
+        subprocess.Popen(command, env=ui_launch_environment(), start_new_session=True)
+        NSApplication.sharedApplication().terminate_(None)
 
     @objc.python_method
     def open_full_disk_access_settings(self) -> bool:
@@ -259,11 +290,11 @@ def _install_main_menu(app) -> None:
 
     app_menu_item = NSMenuItem.alloc().init()
     app_submenu = NSMenu.alloc().initWithTitle_("msgflow")
-    hide_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Hide msgflow", "hide:", "h")
-    hide_others_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Hide Others", "hideOtherApplications:", "h")
+    hide_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.hide"), "hide:", "h")
+    hide_others_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.hide_others"), "hideOtherApplications:", "h")
     hide_others_item.setKeyEquivalentModifierMask_(NSEventModifierFlagCommand | NSEventModifierFlagOption)
-    show_all_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Show All", "unhideAllApplications:", "")
-    quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Quit msgflow", "terminate:", "q")
+    show_all_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.show_all"), "unhideAllApplications:", "")
+    quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.quit"), "terminate:", "q")
     app_submenu.addItem_(hide_item)
     app_submenu.addItem_(hide_others_item)
     app_submenu.addItem_(show_all_item)
@@ -273,23 +304,23 @@ def _install_main_menu(app) -> None:
     main_menu.addItem_(app_menu_item)
 
     edit_menu_item = NSMenuItem.alloc().init()
-    edit_submenu = NSMenu.alloc().initWithTitle_("Edit")
+    edit_submenu = NSMenu.alloc().initWithTitle_(t("main.edit"))
     for title, action, key in [
-        ("Undo", "undo:", "z"),
-        ("Redo", "redo:", "Z"),
-        ("Cut", "cut:", "x"),
-        ("Copy", "copy:", "c"),
-        ("Paste", "paste:", "v"),
-        ("Select All", "selectAll:", "a"),
+        (t("main.undo"), "undo:", "z"),
+        (t("main.redo"), "redo:", "Z"),
+        (t("main.cut"), "cut:", "x"),
+        (t("main.copy"), "copy:", "c"),
+        (t("main.paste"), "paste:", "v"),
+        (t("main.select_all"), "selectAll:", "a"),
     ]:
         edit_submenu.addItem_(NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action, key))
     edit_menu_item.setSubmenu_(edit_submenu)
     main_menu.addItem_(edit_menu_item)
 
     window_menu_item = NSMenuItem.alloc().init()
-    window_submenu = NSMenu.alloc().initWithTitle_("Window")
-    minimize_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Minimize", "performMiniaturize:", "m")
-    close_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Close Window", "performClose:", "w")
+    window_submenu = NSMenu.alloc().initWithTitle_(t("main.window"))
+    minimize_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.minimize"), "performMiniaturize:", "m")
+    close_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.close_window"), "performClose:", "w")
     window_submenu.addItem_(minimize_item)
     window_submenu.addItem_(close_item)
     window_menu_item.setSubmenu_(window_submenu)
