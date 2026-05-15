@@ -240,13 +240,13 @@ def main() -> None:
 
     cli_archive = archive_cli(version, arch, out_dir)
     app_archive = archive_app(version, arch, out_dir)
-    if args.smoke_homebrew_app:
+    if args.smoke_homebrew:
         verify_app_archive_launches(app_archive)
     notarize_app(app_archive)
     if os.environ.get("APPLE_ID") and os.environ.get("APPLE_APP_SPECIFIC_PASSWORD") and os.environ.get("APPLE_TEAM_ID"):
         app_archive.unlink(missing_ok=True)
         app_archive = archive_app(version, arch, out_dir)
-        if args.smoke_homebrew_app:
+        if args.smoke_homebrew:
             verify_app_archive_launches(app_archive)
 
     homepage = f"https://github.com/{args.repo}" if args.repo else "https://github.com/axel/msgflow"
