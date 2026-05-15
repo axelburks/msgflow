@@ -93,7 +93,7 @@ smoke-app:
 	open dist/msgflow.app
 
 smoke-homebrew:
-	$(PYTHON) scripts/release.py --skip-build --out-dir release
+	$(PYTHON) scripts/release.py --skip-build --out-dir release --smoke-homebrew-app
 
 smoke-all: smoke-cli smoke-core
 	@echo "Packaged CLI binaries look runnable."

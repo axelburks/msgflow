@@ -40,6 +40,13 @@ brew upgrade msgflow-app
 
 打开 `msgflow.app`，按引导授权，然后从菜单栏打开配置目录。
 
+如果 macOS 提示 `msgflow.app` 已损坏或无法打开，可移除 quarantine 标记后再打开：
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/msgflow.app
+open /Applications/msgflow.app
+```
+
 ### Homebrew CLI
 
 如果你更希望把监听器作为后台服务运行，可以安装 CLI。

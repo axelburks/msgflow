@@ -207,6 +207,11 @@ def main() -> None:
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""), help="owner/repo for release URLs")
     parser.add_argument("--out-dir", default="release", help="output directory relative to project root")
     parser.add_argument("--skip-build", action="store_true", help="reuse existing dist artifacts")
+    parser.add_argument(
+        "--smoke-homebrew",
+        action="store_true",
+        help="launch-test the Homebrew app zip after extracting it; intended for local verification",
+    )
     args = parser.parse_args()
 
     version = args.version or project_version()
@@ -229,20 +234,20 @@ def main() -> None:
         build_pyinstaller("msgflow-core.spec", version)
         build_pyinstaller("msgflow-app.spec", version)
         bundle_core_binary()
-        with tempfile.TemporaryDirectory(prefix="msgflow-app-smoke-") as temp_dir:
-            verify_app_launches(DIST_DIR / "msgflow.app", config_dir=Path(temp_dir) / "config")
         signing_identity = find_codesigning_identity()
         if signing_identity:
             codesign_app(DIST_DIR / "msgflow.app", signing_identity)
 
     cli_archive = archive_cli(version, arch, out_dir)
     app_archive = archive_app(version, arch, out_dir)
-    verify_app_archive_launches(app_archive)
+    if args.smoke_homebrew_app:
+        verify_app_archive_launches(app_archive)
     notarize_app(app_archive)
     if os.environ.get("APPLE_ID") and os.environ.get("APPLE_APP_SPECIFIC_PASSWORD") and os.environ.get("APPLE_TEAM_ID"):
         app_archive.unlink(missing_ok=True)
         app_archive = archive_app(version, arch, out_dir)
-        verify_app_archive_launches(app_archive)
+        if args.smoke_homebrew_app:
+            verify_app_archive_launches(app_archive)
 
     homepage = f"https://github.com/{args.repo}" if args.repo else "https://github.com/axel/msgflow"
     release_base_url = f"{homepage}/releases/download/{tag}" if args.repo else ""

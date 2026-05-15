@@ -40,6 +40,13 @@ brew upgrade msgflow-app
 
 Open `msgflow.app`, grant the requested permissions, then open the config folder from the menu bar item.
 
+If macOS says `msgflow.app` is damaged or cannot be opened, remove the quarantine flag manually and open it again:
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/msgflow.app
+open /Applications/msgflow.app
+```
+
 ### Homebrew CLI
 
 Use the CLI if you prefer running the listener as a background service.
