@@ -58,7 +58,7 @@ brew install axelburks/tap/msgflow
 Upgrade:
 
 ```bash
-brew upgrade msgflow
+brew update && brew upgrade msgflow-app
 ```
 
 Start the background service:
@@ -193,8 +193,7 @@ alarm:
 - [x] App version with initial support for the menu bar, listener status switching, history window, and other basic features
 - [x] App support for floating panels that display messages and verification codes, with click-to-type/paste actions for specified content
 - [x] App support for multi-filtering records, rematching, resending a single destination, deleting records, viewing config, and editing cursors
-- [ ] App support for automatic record refresh in the main window
-- [ ] Support switching to unix socket for rpc communication
+- [x] Use unix sockets for rpc communication
 - [ ] Support listening to notifications from iPhone
 - [ ] App support for multilingual UI
 - [ ] App support for signing and building the app

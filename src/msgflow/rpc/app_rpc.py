@@ -1,24 +1,28 @@
+import json
 from typing import Any
 
-import requests
+from .transport import APP_SOCKET_NAME, RPCError, app_socket_path, request
 
 
-APP_RPC_BASE_URL = "http://127.0.0.1:39402"
 APP_RPC_TIMEOUT = 3
 
 
 def _post(path: str, payload: dict[str, Any]) -> tuple[bool, str]:
     try:
-        response = requests.post(
-            f"{APP_RPC_BASE_URL}{path}",
-            json=payload,
+        response = request(
+            app_socket_path(),
+            {
+                "method": "POST",
+                "path": path,
+                "payload": payload,
+            },
             timeout=APP_RPC_TIMEOUT,
         )
-        if response.status_code != 200:
-            return False, f"app rpc error: {response.status_code} {response.text}"
-        return True, response.text
+        return True, json.dumps(response, ensure_ascii=False, default=str, separators=(",", ":"))
+    except RPCError as e:
+        return False, f"{APP_SOCKET_NAME} rpc error: {e.status} {e.payload}"
     except Exception as e:
-        return False, f"app rpc error: {e}"
+        return False, f"{APP_SOCKET_NAME} rpc error: {e}"
 
 
 def show_notification(title: str, body: str) -> tuple[bool, str]:

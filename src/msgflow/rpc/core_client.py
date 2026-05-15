@@ -1,12 +1,10 @@
 from typing import Any, Optional
 from urllib.parse import urlencode
 
-import requests
-
 from ..common.run_models import RunQueryFilters
+from .transport import RPCError, core_socket_path, request
 
 
-CORE_RPC_BASE_URL = "http://127.0.0.1:39401"
 CORE_RPC_TIMEOUT = 5
 CORE_STATUS_TIMEOUT = 0.5
 
@@ -19,16 +17,20 @@ def _request(
     timeout: float = CORE_RPC_TIMEOUT,
     allow_error_field: bool = False,
 ) -> dict[str, Any]:
-    response = requests.request(
-        method=method,
-        url=f"{CORE_RPC_BASE_URL}{path}",
-        json=payload,
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    data = response.json()
-    if not isinstance(data, dict):
-        raise ValueError("core rpc returned invalid json body")
+    try:
+        data = request(
+            core_socket_path(),
+            {
+                "method": method,
+                "path": path,
+                "payload": payload or {},
+            },
+            timeout=timeout,
+        )
+    except RPCError as e:
+        if allow_error_field:
+            return e.payload
+        raise
     if data.get("error") and not allow_error_field:
         raise ValueError(str(data["error"]))
     return data

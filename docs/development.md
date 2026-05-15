@@ -28,7 +28,7 @@ make install-test
 | `src/msgflow/core.py` | Package core entry point used by `msgflow`. |
 | `src/msgflow/service/` | Runtime, flows, channels, history, and replay logic. |
 | `src/msgflow/ui/` | AppKit UI, setup, menu bar, main window, floating panel. |
-| `src/msgflow/rpc/` | Local HTTP RPC between app, core, and app-backed channels. |
+| `src/msgflow/rpc/` | Local Unix socket RPC between app, core, and app-backed channels. |
 | `tests/fixtures/` | Explicit mock data for local development. |
 
 ## Run From Source
@@ -193,8 +193,8 @@ make smoke-all
 
 ## Architecture Notes
 
-- Core and UI communicate through local HTTP RPC on `127.0.0.1:39401`.
-- App-backed channels (`notification`, `floating`) call the app RPC server on `127.0.0.1:39402`.
+- Core and UI communicate through a local Unix socket at `<config-dir>/run/core.sock`.
+- App-backed channels (`notification`, `floating`) call the app RPC server through `<config-dir>/run/app.sock`.
 - The app can manage a bundled core process or connect to an external core if it is already running.
 - Source database access is probed at runtime so permission problems can be shown as structured UI errors.
 - SQLite history stores message records, run records, cursor state, and app history data.

@@ -94,6 +94,23 @@ def test_list_runs_applies_structured_filters_and_query(tmp_path, monkeypatch):
     assert result["items"][0]["created_at_str"].startswith("ts:")
 
 
+def test_list_runs_applies_boolean_dsl_query(tmp_path, monkeypatch):
+    store = HistoryStore(str(tmp_path / "history.db"))
+    monkeypatch.setattr("msgflow.service.history.format_ts", lambda ts: f"ts:{ts}")
+    _insert_sample_run(store, kind="sms", text="验证码 123456", status="success")
+    _insert_sample_run(store, kind="sms", text="debug 000000", status="failed")
+    _insert_sample_run(store, kind="notify", text="普通通知", status="failed")
+
+    result = store.list_runs(
+        limit=20,
+        offset=0,
+        query=r"kind:sms status:(success | failed) -text:debug code:~'\d+'",
+    )
+
+    assert result["total"] == 1
+    assert result["items"][0]["text_preview"] == "验证码 123456"
+
+
 def test_get_message_detail_returns_message_with_runs(tmp_path):
     store = HistoryStore(str(tmp_path / "history.db"))
     message_id, run_id = _insert_sample_run(store)

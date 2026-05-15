@@ -35,7 +35,7 @@ brew install axelburks/tap/msgflow-app
 升级：
 
 ```bash
-brew upgrade msgflow-app
+brew update && brew upgrade msgflow-app
 ```
 
 打开 `msgflow.app`，按引导授权，然后从菜单栏打开配置目录。
@@ -193,8 +193,7 @@ alarm:
 - [x] App 版本，初版支持菜单栏、切换监听状态、运行历史窗口等基础功能
 - [x] App 支持浮窗显示消息、验证码，支持点击输入/粘贴指定内容
 - [x] App 支持记录多重筛选、重新匹配、单目标重发、删除记录、查看配置和编辑游标
-- [ ] App 支持主窗口自动刷新记录
-- [ ] rpc 更换为 unix socket
+- [x] rpc 更换为 unix socket
 - [ ] 支持监听来自 iPhone 的通知
 - [ ] App 支持多语言界面
 - [ ] App 自动签名构建产物
