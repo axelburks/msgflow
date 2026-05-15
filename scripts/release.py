@@ -48,6 +48,16 @@ def project_version() -> str:
     return match.group(1)
 
 
+def clean_package_metadata() -> None:
+    for egg_info_dir in (ROOT_DIR / "src").glob("*.egg-info"):
+        shutil.rmtree(egg_info_dir, ignore_errors=True)
+
+
+def refresh_package_metadata() -> None:
+    clean_package_metadata()
+    run([sys.executable, "-m", "pip", "install", "--no-deps", "-e", str(ROOT_DIR)])
+
+
 def build_pyinstaller(spec_name: str, version: str) -> None:
     env = dict(os.environ)
     env["PYINSTALLER_CONFIG_DIR"] = str(PYINSTALLER_CONFIG_DIR)
@@ -153,6 +163,7 @@ def main() -> None:
     arch = platform.machine().lower().replace("aarch64", "arm64")
 
     if not args.skip_build:
+        refresh_package_metadata()
         shutil.rmtree(BUILD_DIR, ignore_errors=True)
         shutil.rmtree(DIST_DIR, ignore_errors=True)
         build_pyinstaller("msgflow-cli.spec", version)

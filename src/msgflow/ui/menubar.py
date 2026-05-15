@@ -1,5 +1,6 @@
-import objc
 from importlib.metadata import PackageNotFoundError, metadata, version
+
+import objc
 from AppKit import (
     NSApp,
     NSAlert,
@@ -235,7 +236,7 @@ class MenuBarController(NSObject):
         try:
             return version("msgflow")
         except PackageNotFoundError:
-            return "0.1.0"
+            return "unknown"
 
     @objc.python_method
     def _app_metadata(self):

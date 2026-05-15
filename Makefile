@@ -96,4 +96,4 @@ smoke-all: smoke-cli smoke-core
 	@echo "Run 'make smoke-app' to open the packaged app."
 
 clean:
-	rm -rf build dist release .pyinstaller-cache
+	rm -rf build dist release .pyinstaller-cache src/*.egg-info

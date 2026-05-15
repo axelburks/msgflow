@@ -1,4 +1,4 @@
-import sys, time, json, random, traceback, logging
+import os, sys, time, json, random, traceback, logging
 from typing import Any, Optional
 import regex
 
@@ -8,6 +8,12 @@ from ...common.utils import format_ts, get_code_from_text
 from ..channels import Channels, CHANNEL_NOTIFIERS, LOCAL_CHANNELS
 
 logger = logging.getLogger(__name__)
+MANAGED_CORE_ENV = "MSGFLOW_MANAGED_CORE"
+
+
+def _observe_log(message: str) -> None:
+    level = logging.DEBUG if os.environ.get(MANAGED_CORE_ENV) else logging.INFO
+    logger.log(level, message)
 
 
 class MsgFlow(Channels):
@@ -162,12 +168,12 @@ class MsgFlow(Channels):
         if filters:
             for f in filters:
                 if not self.is_filter_matched(msg, f['match'], f['type']):
-                    logger.debug(f"🕸️  filter [x]: {json.dumps(f, ensure_ascii=False, default=str)}")
+                    _observe_log(f"🕸️  filter [x]: {json.dumps(f, ensure_ascii=False, default=str)}")
                     return False
                 else:
-                    logger.debug(f"🕸️  filter [√]: {json.dumps(f, ensure_ascii=False, default=str)}")
+                    _observe_log(f"🕸️  filter [√]: {json.dumps(f, ensure_ascii=False, default=str)}")
             return True
-        logger.debug("🕸️  no filters")
+        _observe_log("🕸️  no filters")
         return True
 
     def _build_filter_results(
@@ -176,11 +182,16 @@ class MsgFlow(Channels):
         filters: Optional[list[dict[str, Any]]],
     ) -> tuple[bool, list[dict[str, Any]]]:
         if not filters:
+            _observe_log("🕸️  no filters")
             return True, []
         results = []
         all_matched = True
         for idx, cur_filter in enumerate(filters):
             cur_matched = self.is_filter_matched(msg, cur_filter['match'], cur_filter['type'])
+            _observe_log(
+                f"🕸️  filter [{'√' if cur_matched else 'x'}]: "
+                f"{json.dumps(cur_filter, ensure_ascii=False, default=str)}"
+            )
             if not cur_matched:
                 all_matched = False
             results.append(
@@ -233,7 +244,7 @@ class MsgFlow(Channels):
         msg = {**raw_msg, **template_context}
         msg_code = msg.get("code")
         if msg_code:
-            logger.debug(f"🔐 {msg_code}")
+            _observe_log(f"🔐 {msg_code}")
         msg["msg"] = json.dumps(msg, ensure_ascii=False, default=str)
         msg_key = msg.get(self.CURSOR_FIELD)
         msg_ts = msg.get("timestamp")
@@ -258,7 +269,7 @@ class MsgFlow(Channels):
             rule_filters = rule.get("filters")
             rule_strategy = rule.get("strategy")
             rule_dests = rule.get("destinations") or []
-            logger.debug(f"📏 {rule_name}({rule_strategy})")
+            _observe_log(f"📏 {rule_name}({rule_strategy})")
 
             filters_matched, filter_results = self._build_filter_results(msg, rule_filters)
             if filters_matched:
@@ -525,7 +536,7 @@ class MsgFlow(Channels):
             self.last_new_msg_time = c_timestamp
             for msg in new_msgs:
                 try:
-                    logger.debug(f"{'>' * 15} {self.NEW_MSG_HIT} {self.KIND} {'<' * 15}")
+                    _observe_log(f"{'>' * 15} {self.NEW_MSG_HIT} {self.KIND} {'<' * 15}")
                     self.process_message(
                         msg,
                         trigger_type=RunTriggerType.AUTO.value,
@@ -539,7 +550,7 @@ class MsgFlow(Channels):
                     self.send_alarm(msg=msg, error=str(e), traceback=traceback.format_exc())
                     continue
                 finally:
-                    logger.debug(f"{'>' * 15} {self.DONE_MSG_HIT} {self.KIND} {'<' * 15}")
+                    _observe_log(f"{'>' * 15} {self.DONE_MSG_HIT} {self.KIND} {'<' * 15}")
 
         elif self.is_1st_start:
             # On the very first tick, persist the initial state so a fresh run

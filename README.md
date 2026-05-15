@@ -172,8 +172,10 @@ alarm:
 - [x] App support for floating panels that display messages and verification codes, with click-to-type/paste actions for specified content
 - [x] App support for multi-filtering records, rematching, resending a single destination, deleting records, viewing config, and editing cursors
 - [ ] App support for automatic record refresh in the main window
-- [ ] App support for multilingual UI
+- [ ] Support switching to unix socket for rpc communication
 - [ ] Support listening to notifications from iPhone
+- [ ] App support for multilingual UI
+- [ ] App support for signing and building the app
 
 ## Documentation
 

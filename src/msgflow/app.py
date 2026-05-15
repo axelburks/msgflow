@@ -82,6 +82,7 @@ class MacAppController(NSObject):
                 env[LOG_FILE_ENV] = str(log_path)
             else:
                 env.pop(LOG_FILE_ENV, None)
+            env["MSGFLOW_MANAGED_CORE"] = "1"
             logger.info("starting managed core: %s", " ".join(command))
             self._managed_core_process = subprocess.Popen(
                 command,
@@ -301,7 +302,7 @@ def _install_main_menu(app) -> None:
 def main() -> None:
     format_text = (
         ('\r\x1b[K' if sys.stderr.isatty() else '')
-        + '%(asctime)s - app - %(levelname)-5s - %(message)s'
+        + '%(asctime)s - app  - %(levelname)-5s - %(message)s'
     )
     if is_frozen():
         configure_root_logging(
