@@ -35,31 +35,33 @@ def get_app_name(bundle_id: Optional[str]) -> Optional[str]:
     if last_miss is not None and (time.time() - last_miss) < _APP_NAME_MISS_TTL:
         return None
 
+    app_path = _app_path_from_mdfind(bundle_id)
+    if app_path is None:
+        _APP_NAME_MISS[bundle_id] = time.time()
+        return None
+
+    name = os.path.splitext(os.path.basename(app_path))[0]
+    _APP_NAME_CACHE[bundle_id] = name
+    _APP_NAME_MISS.pop(bundle_id, None)
+    return name
+
+
+def _app_path_from_mdfind(bundle_id: str) -> Optional[str]:
     try:
         result = subprocess.run(
             ['mdfind', f'kMDItemCFBundleIdentifier == "{bundle_id}"'],
             capture_output=True, text=True, timeout=2
         )
         out = result.stdout.strip().splitlines()
-        if not out:
-            logger.warning(
-                f"⚠️ mdfind returned empty for '{bundle_id}' "
-                f"(rc={result.returncode}, stderr={result.stderr!r})"
-            )
+        if out:
+            return out[0]
+        logger.warning(
+            f"⚠️ mdfind returned empty for '{bundle_id}' "
+            f"(rc={result.returncode}, stderr={result.stderr!r})"
+        )
     except Exception as e:
         logger.error(f"❌ get app name for '{bundle_id}' error: {e}")
-        out = []
-
-    if not out:
-        _APP_NAME_MISS[bundle_id] = time.time()
-        return None
-
-    # mdfind returns the app bundle path; basename-without-extension is the
-    # canonical display name used by Finder.
-    name = os.path.splitext(os.path.basename(out[0]))[0]
-    _APP_NAME_CACHE[bundle_id] = name
-    _APP_NAME_MISS.pop(bundle_id, None)
-    return name
+    return None
 
 
 def format_ts(ts: Any) -> str:
@@ -145,9 +147,9 @@ def get_code_from_text(text: Optional[str]) -> Optional[str]:
 
 if __name__ == '__main__':
     # Lightweight self-test harness: runs `get_code_from_text` against the
-    # sample data in ./sms/sms.json and ./notify/notify.json, comparing the
+    # sample data in ../tests/fixtures, comparing the
     # extracted code with the `code_expected` field on each sample.
-    import os
+    from .paths import test_fixture_path
 
     def _load_json(path: str) -> Optional[Any]:
         if not os.path.exists(path):
@@ -187,13 +189,13 @@ if __name__ == '__main__':
         return total, len(failed)
 
     sms_total, sms_fail = _run_cases(
-        "sms (./sms/sms.json)",
-        _load_json(os.path.expanduser("./sms/sms.json")),
+        "sms (tests/fixtures/sms/sms.json)",
+        _load_json(str(test_fixture_path("sms", "sms.json"))),
         lambda m: m.get('text') or '',
     )
     notify_total, notify_fail = _run_cases(
-        "notify (./notify/notify.json)",
-        _load_json(os.path.expanduser("./notify/notify.json")),
+        "notify (tests/fixtures/notify/notify.json)",
+        _load_json(str(test_fixture_path("notify", "notify.json"))),
         _build_text_for_notify,
     )
 

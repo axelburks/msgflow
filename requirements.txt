@@ -5,3 +5,4 @@ requests
 pytypedstream
 regex
 pydantic
+pyobjc

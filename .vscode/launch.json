@@ -2,58 +2,73 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "normal",
+      "name": "core-normal",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/core.py",
+      "args": [],
+    },
+    {
+      "name": "core-check",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/core.py",
+      "args": [
+        "-c",
+      ],
+    },
+    {
+      "name": "core-mock",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/core.py",
+      "args": [
+        "-m",
+        "--kind",
+        "all",
+        "--fixture-dir",
+        "${workspaceFolder}/tests/fixtures",
+      ],
+    },
+    {
+      "name": "core-debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/core.py",
+      "args": [
+        "-d",
+      ],
+    },
+    {
+      "name": "core-check-debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/core.py",
+      "args": [
+        "-c",
+        "-d",
+      ],
+    },
+    {
+      "name": "core-mock-debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/core.py",
+      "args": [
+        "-m",
+        "--kind",
+        "all",
+        "--fixture-dir",
+        "${workspaceFolder}/tests/fixtures",
+        "-d",
+      ],
+    },
+    {
+      "name": "app-ui",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/app.py",
       "args": [],
-    },
-    {
-      "name": "check-normal",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/app.py",
-      "args": [
-        "-c",
-      ],
-    },
-    {
-      "name": "mock-normal",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/app.py",
-      "args": [
-        "-m",
-      ],
-    },
-    {
-      "name": "debug",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/app.py",
-      "args": [
-        "-d",
-      ],
-    },
-    {
-      "name": "check-debug",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/app.py",
-      "args": [
-        "-c",
-        "-d",
-      ],
-    },
-    {
-      "name": "mock-debug",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/app.py",
-      "args": [
-        "-m",
-        "-d",
-      ],
     }
   ]
 }

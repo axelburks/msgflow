@@ -1,0 +1,20 @@
+cask "msgflow-app" do
+  version "{{VERSION}}"
+  sha256 "{{APP_SHA256}}"
+
+  url "{{APP_URL}}"
+  name "msgflow"
+  desc "macOS message forwarding menu bar app"
+  homepage "{{HOMEPAGE}}"
+
+  depends_on macos: ">= :big_sur"
+
+  app "msgflow.app"
+
+  zap trash: [
+    "~/.config/msgflow",
+    "~/Library/LaunchAgents/com.axel.msgflow.ui.plist",
+    "~/Library/Logs/msgflow.log",
+    "~/Library/Logs/msgflow-service.log",
+  ]
+end

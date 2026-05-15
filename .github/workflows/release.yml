@@ -1,0 +1,105 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the leading v; defaults to pyproject.toml"
+        required: false
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+          python -m pip install pyinstaller
+          python -m pip install -e .
+
+      - name: Verify
+        run: |
+          python -m pytest tests -q
+          python -m compileall app.py core.py src scripts/release.py
+
+      - name: Resolve release metadata
+        id: release_meta
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(python - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path("pyproject.toml").read_text(encoding="utf-8")
+          match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
+          if match is None:
+              raise SystemExit("pyproject.toml does not define [project].version")
+          print(match.group(1))
+          PY
+          )"
+          fi
+
+          TAG="v${VERSION}"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "$TAG" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match pyproject/input version ${VERSION}" >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release artifacts
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          python scripts/release.py \
+            --version "${{ steps.release_meta.outputs.version }}" \
+            --tag "${{ steps.release_meta.outputs.tag }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --out-dir release
+
+      - name: Upload GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            release/*.tar.gz
+            release/*.zip
+            release/homebrew/Formula/msgflow.rb
+            release/homebrew/Casks/msgflow-app.rb
+
+      - name: Publish Homebrew tap
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' && env.HOMEBREW_TAP_REPO != '' }}
+        run: |
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" tap
+          mkdir -p tap/Formula tap/Casks
+          cp release/homebrew/Formula/msgflow.rb tap/Formula/msgflow.rb
+          cp release/homebrew/Casks/msgflow-app.rb tap/Casks/msgflow-app.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/msgflow.rb Casks/msgflow-app.rb
+          git commit -m "msgflow ${{ steps.release_meta.outputs.tag }}" || exit 0
+          git push

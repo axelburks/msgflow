@@ -1,6 +1,7 @@
 import logging, json, html, subprocess
 from typing import Any, Callable
 import requests, pyperclip
+from ..rpc.app_rpc import show_notification as app_show_notification, show_floating as app_show_floating
 
 logger = logging.getLogger(__name__)
 
@@ -161,8 +162,9 @@ class Channels(object):
 
     @channel('notification')
     def notify_to_notification(self, dest: dict[str, Any]) -> tuple[bool, str]:
-        # macOS system notification via AppleScript (`osascript`). Runs locally
-        # only; intended as a fallback / on-device alert channel.
+        # App-backed local notification. Kept as a local-only channel so the
+        # current machine owns presentation while the forwarding pipeline still
+        # uses the same destination abstraction as remote channels.
         logmarker = dest.get('logmarker')
         dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
         logger.info(f"{dest_mark}")
@@ -171,25 +173,35 @@ class Channels(object):
         body = payload.get('body')
         if not title or not body:
             return False, f"{dest_mark} error: title or body is empty in payload"
-        try:
-            result = subprocess.run(
-                [
-                    'osascript',
-                    '-e',
-                    f'display notification "{body}" with title "{title}"'
-                ],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            # autoCopy=1: also copy the `copy` field to the clipboard so the
-            # user can paste the verification code immediately after tapping
-            # the notification.
-            if payload.get('autoCopy') == 1 and payload.get('copy'):
-                self.save_to_clipboard(payload.get('copy'))
-            return True, result.stdout
-        except Exception as e:
-            return False, f"{dest_mark} error: {e}"
+        cur_status, cur_res = app_show_notification(str(title), str(body))
+        if not cur_status:
+            fallback_status, fallback_res = self._osascript_notification(str(title), str(body))
+            if fallback_status:
+                logger.warning(f"{dest_mark} app rpc unavailable, using osascript fallback")
+                cur_status, cur_res = True, f"{cur_res}; fallback: {fallback_res}"
+        if cur_status and payload.get('autoCopy') == 1 and payload.get('copy'):
+            self.save_to_clipboard(payload.get('copy'))
+        if not cur_status:
+            return False, f"{dest_mark} error: {cur_res}"
+        return True, cur_res
+
+    @channel('floating')
+    def notify_to_floating(self, dest: dict[str, Any]) -> tuple[bool, str]:
+        # Floating panel is also presented by the local app process. It shows
+        # message content near the cursor and provides fixed Type/Paste actions.
+        logmarker = dest.get('logmarker')
+        dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
+        logger.info(f"{dest_mark}")
+        payload = dest.get('payload') or {}
+        title = payload.get('title')
+        body = payload.get('body')
+        input_text = payload.get('input')
+        if not title or not body or input_text is None or input_text == '':
+            return False, f"{dest_mark} error: title/body/input is empty in payload"
+        cur_status, cur_res = app_show_floating(str(title), str(body), str(input_text))
+        if not cur_status:
+            return False, f"{dest_mark} error: {cur_res}"
+        return True, cur_res
 
     def send_notification(self, title: str, body: str = "") -> None:
         # Send a notification to the local system without complex destination.
@@ -206,6 +218,43 @@ class Channels(object):
         if not status:
             logger.error(f"❌ notification error: {result}")
     
+    def _osascript_notification(self, title: str, body: str, subtitle: str = "") -> tuple[bool, str]:
+        # Fallback used only for local notifications when the macOS app process
+        # is not running. Floating panels intentionally do not downgrade.
+        script = [
+            "on run argv",
+            "set notifTitle to item 1 of argv",
+            "set notifBody to item 2 of argv",
+            "if (count of argv) >= 3 then",
+            "set notifSubtitle to item 3 of argv",
+            'if notifSubtitle is not "" then',
+            "display notification notifBody with title notifTitle subtitle notifSubtitle",
+            'return "ok"',
+            "end if",
+            "end if",
+            "display notification notifBody with title notifTitle",
+            'return "ok"',
+            "end run",
+        ]
+        try:
+            command = ["osascript"]
+            for line in script:
+                command.extend(["-e", line])
+            command.extend([title, body, subtitle])
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            if result.returncode != 0:
+                error_text = (result.stderr or result.stdout).strip()
+                return False, f"osascript error: {error_text or 'unknown error'}"
+            return True, "osascript notification sent"
+        except Exception as e:
+            return False, f"osascript error: {e}"
+
     def save_to_clipboard(self, code: Any) -> None:
         # Thin wrapper so tests/other notifiers can stub out clipboard writes.
         pyperclip.copy(str(code))
@@ -217,6 +266,6 @@ CHANNEL_NOTIFIERS = build_channel_notifiers_for_cls(Channels)
 AVAILABLE_CHANNELS = tuple(CHANNEL_NOTIFIERS.keys())
 # Local-only channels don't go out over the network; their cursors are reset
 # on every startup (see MsgFlow.init_cursor).
-LOCAL_CHANNELS = ("notification",)
+LOCAL_CHANNELS = ("notification", "floating")
 # Remote/HTTP channels: everything not in LOCAL_CHANNELS.
 REQ_CHANNELS = tuple(c for c in AVAILABLE_CHANNELS if c not in LOCAL_CHANNELS)

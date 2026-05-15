@@ -2,7 +2,7 @@ import copy
 from typing import Any, Optional
 import regex
 
-from utils import try_parse_json
+from .utils import try_parse_json
 
 # Template variables are written as {{name}} and matched with this regex.
 TPL_VAR_PATTERN = r"\{\{(\w+)\}\}"

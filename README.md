@@ -1,438 +1,189 @@
-# MsgFlow — macOS 消息转发工具
+# MsgFlow
 
-在 macOS 上实时读取短信/通知等消息，按规则转发到 Bark / Telegram / 飞书 / PushGo / Webhook / 通知消息 等通道，并支持模板渲染。
+[简体中文](./README.zh-CN.md) | English
 
-支持两类消息源：
+MsgFlow is a macOS message forwarding app. It listens for SMS and notification messages received on your device, forwards them to Bark, Telegram, Lark, PushGo, webhooks, macOS notifications, or floating panels, and supports rule matching plus template rendering.
 
-- `sms`：iMessage 短信（读取 `~/Library/Messages/chat.db`）
-- `notify`：macOS 通知中心的第三方 App 通知（读取 `~/Library/Group Containers/group.com.apple.usernoted/db2/db`）
+## Highlights
 
----
+- **Multiple sources**: reads SMS/iMessage from `~/Library/Messages/chat.db` and macOS notification records from `~/Library/Group Containers/group.com.apple.usernoted/db2/db`.
+- **Code detection**: detects verification codes in Simplified Chinese, Traditional Chinese, and English messages, with dedicated templates for code messages.
+- **Rule-based forwarding**: routes messages to different destinations with `and`, `or`, and `selector` filters using regex and message fields.
+- **Multiple channels**: supports `bark`, `tgbot`, `pushgo`, `lark`, `webhook`, `notification`, and `floating`.
+- **Native macOS app**: provides a menu bar app, permission setup, listener controls, Launch at Login, history window, config viewer, local notifications, and verification-code floating panels.
+- **Reliable state tracking**: stores message records, run records, and per-destination cursors in SQLite to ensure messages received while MsgFlow was not running are not missed.
+- **Replay and debugging**: supports rematching historical messages, resending one destination, deleting records, viewing the effective config, and editing cursors.
 
-## 目录
+## Requirements
 
-- [MsgFlow — macOS 消息转发工具](#msgflow--macos-消息转发工具)
-  - [目录](#目录)
-  - [特性](#特性)
-  - [依赖环境](#依赖环境)
-  - [快速开始](#快速开始)
-  - [配置说明](#配置说明)
-    - [顶层结构](#顶层结构)
-    - [channel 通道公共配置](#channel-通道公共配置)
-    - [target 转发目标](#target-转发目标)
-    - [sms 转发规则](#sms-转发规则)
-    - [notify 通知消息转发规则](#notify-通知消息转发规则)
-    - [alarm 异常告警](#alarm-异常告警)
-  - [模板系统](#模板系统)
-    - [值条件字典](#值条件字典)
-    - [可用模板变量](#可用模板变量)
-  - [配置合并与优先级](#配置合并与优先级)
-  - [命令行参数](#命令行参数)
-  - [完整示例](#完整示例)
-  - [Roadmap](#roadmap)
-  - [Credits](#credits)
-  - [License](#license)
+- macOS; Python 3.10+ is required when running from source.
+- The listener process needs Full Disk Access, otherwise it cannot read SMS and notification records.
+- Accessibility permission is required for floating panels and Type/Paste actions.
+- To forward iPhone SMS, the messages must appear in Messages on the Mac, for example through iCloud Messages or Text Message Forwarding.
+- To forward notifications, the target notifications must already appear in macOS Notification Center.
 
----
+## Installation
 
-## 特性
+### Homebrew App
 
-- 实时监听 macOS 数据库，并可自动识别短信/通知等消息中的中文(简/繁)、英文验证码消息
-- 多通道推送：`bark`、`tgbot`、`pushgo`、`lark`、`webhook`、`notification`（macOS 本地通知）
-- 规则化转发：按 `filters`（and/or/selector 正则匹配）路由到不同 `destinations`
-- 支持 `until_success` / `all` 两种投递策略
-- 异常告警通道（alarm），失败自动上报
-- 基于「值条件字典」的模板系统，可针对「默认 / 含验证码 / 告警」三种场景分别渲染标题、正文、复制内容
-- 启动时通过 pydantic 对配置进行严格校验
+The app version is recommended because it provides floating panels, verification-code input actions, permission setup, and history viewing.
 
-## 依赖环境
-
-- macOS（读取 `~/Library/Messages/chat.db`）
-- Python 3.10+（代码使用了 `TypeAlias` 等类型特性）
-- 已在 macOS 上开启「信息」并与 iPhone 使用同一 iCloud 账号、开启云端信息或短信转发
-- 终端或 App 需被授予「完全磁盘访问权限」以读取短信数据库
-
-## 快速开始
-
-1. 安装依赖
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. 创建配置文件 `~/.config/msgflow/config.yaml`（最小可用示例）
-   ```yaml
-   target:
-     local_notify:
-       channel: notification
-
-   sms:
-     rules:
-       - name_mark: default_rule
-         destinations:
-           - target: local_notify
-   ```
-
-3. 启动
-   ```bash
-   python app.py
-   ```
-
-常用辅助命令：
 ```bash
-python app.py -c          # check：对所有转发目标发送一次测试消息，验证配置可用
-python app.py -m -n 3     # mock：默认对 sms/notify 进行模拟；可配合 -k 指定 kind
-python app.py -d          # debug：加载 ~/.config/msgflow/debug/config.yaml，日志级别 DEBUG 
+brew tap axelburks/tap
+brew install --cask msgflow-app
 ```
 
----
+Open `msgflow.app`, grant the requested permissions, then open the config folder from the menu bar item.
 
-## 配置说明
+### Homebrew CLI
 
-配置文件默认路径：`~/.config/msgflow/config.yaml`（debug 模式下为 `~/.config/msgflow/debug/config.yaml`）。
+Use the CLI if you prefer running the listener as a background service.
 
-### 顶层结构
+```bash
+brew tap axelburks/tap
+brew install msgflow
+brew services start msgflow
+```
 
-| 字段 | 必填 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `check_interval` | 否 | `3` | 检查新短信的间隔（秒），最小 `1` |
-| `source` | 是 | — | 对应模板变量 `{{source}}`，用于标识来源设备 |
-| `channel` | 否 | 见 [defaults.py](./defaults.py) | 各通道的公共默认配置 |
-| `target` | 是 | — | 具体的转发目标定义，被 `sms` / `alarm` 引用 |
-| `sms` | 是 | — | 短信转发规则 |
-| `alarm` | 是 | — | 异常告警目标 |
+### From Source
 
-### channel 通道公共配置
+```bash
+git clone https://github.com/axelburks/msgflow.git
+cd msgflow
+make install
+```
 
-`channel.<name>` 为对应 `channel` 类型的公共默认值。所有内置通道均已在 [defaults.py](./defaults.py) 预置合理默认，用户通常无需全部覆盖。
+Run the core and app:
 
-支持的 `channel` 类型（见 [channels.py](./channels.py)）：
+```bash
+make run-core
+make run-app
+```
 
-| channel | 类型 | 说明 |
-| --- | --- | --- |
-| `webhook` | 请求型 | 通用 HTTP 请求，透传 `method` / `url` / `params` / `headers` / `payload` |
-| `bark` | 请求型 | [Bark](https://github.com/Finb/Bark) 推送，默认 `POST https://api.day.app/push` |
-| `pushgo` | 请求型 | [PushGo](https://github.com/AldenClark/pushgo) 推送，默认 `POST https://gateway.pushgo.cn/message` |
-| `tgbot` | 请求型 | Telegram Bot，自动对 HTML 文本转义并将 `{{code}}` 包裹为 `<code>` |
-| `lark` | 请求型 | 飞书机器人，默认 payload 为卡片消息字符串模板 |
-| `notification` | 本地 | 调用 `osascript` 弹出 macOS 通知；`autoCopy=1` 时自动把 `copy` 的内容写入剪贴板 |
+For contributor setup, local verification, build, and release notes, see [Development](./docs/development.md).
 
-请求型通道（`REQ_CHANNELS`）通用字段：
+## Quick Start
 
-| 字段 | 说明 |
-| --- | --- |
-| `method` | HTTP 方法，默认 `POST` |
-| `url` | 请求地址（支持模板、值条件字典） |
-| `params` | Query 参数（dict）, 各字段支持模板、值条件字典 |
-| `headers` | 请求头（dict）, 各字段支持模板、值条件字典 |
-| `payload` | 请求体，作为 JSON 发送；字符串值会尝试解析为 JSON 后递归渲染；各字段支持模板、值条件字典 |
-| `timeout` | 超时秒数或 `(connect, read)` |
-| `success_json` | 成功判定的 JSON 子集匹配，如 `{code: 0}`；未配置时仅按 `status_code == 200` 判定 |
-| `logmarker` | 日志前缀 emoji，便于观察 |
-
-本地通道（`notification`）payload 字段：
-
-| 字段 | 说明 |
-| --- | --- |
-| `title` | 通知标题（必填，支持模板、值条件字典） |
-| `body` | 通知正文（必填，支持模板、值条件字典） |
-| `copy` | 配合 `autoCopy` 复制到剪贴板的内容，支持模板、值条件字典 |
-| `autoCopy` | `1` 时将 `copy` 内容写入剪贴板 |
-
-### target 转发目标
+Create `~/.config/msgflow/config.yaml`:
 
 ```yaml
+source: My Mac
+
 target:
-  <target_name>:
-    channel: bark            # 必填，取值见上表
-    logmarker: "🎯"           # 可选
-    # 其余字段会与 channel.<channel> 合并，最终被 destination 再次合并
-```
+  local_notify:
+    channel: notification
 
-### sms 转发规则
-
-```yaml
 sms:
-  strategy: until_success    # 可选，默认 until_success，取值：until_success | all
   rules:
-    - name_mark: default_rule       # 必填，规则标识；作为 destination name_mark 的前缀
-      strategy: until_success       # 可选，覆盖 sms.strategy
-      filters:                      # 可选；多个 filter 之间为 AND
-        - type: and                 # and | or | selector
-          match:
-            receiver: "17112345678|10086"   # regex.match（从开头匹配）
-            sender: "10086"
-        - type: selector            # 判断某 key 是否有值
-          match:
-            code: true              # true/false
-      destinations:                 # 规则命中后投递的目标列表
-        - target: bark_test         # 必填，引用 target 名
-          name_mark: bark_test      # 可选，默认等于 target；最终会被改写为 {kind}_{rule.name_mark}_{destination.name_mark}
-          payload:                  # 可选，进一步覆盖 target/channel 的 payload
-            group: msgflow
-```
-
-策略 `strategy`：
-
-- `until_success`：按顺序投递，任一目标成功即停止；全部失败触发 alarm
-- `all`：全部目标都尝试；存在失败则触发 alarm
-
-过滤器 `filters[].type`：
-
-- `and`：`match` 中所有键都需命中（`regex.match` 从字符串开头匹配）
-- `or`：`match` 中任一键命中即可
-- `selector`：`match` 的值为 `true/false`，判断 msg 中对应 key 是否存在且为真
-
-过滤器 `match` 可用的 key（短信消息字段）：`sender`、`receiver`、`timestamp`、`time_str`、`text`、`msg`、`code`。
-
-### notify 通知消息转发规则
-
-结构与 `sms` 完全一致，默认未启用；填写 `notify.rules` 后自动启用。
-
-```yaml
-notify:
-  strategy: until_success      # 可选，默认 until_success
-  rules:
-    - name_mark: default_notify
-      strategy: until_success
-      filters:
-        - type: and
-          match:
-            sender: "com\\.apple\\.MobileSMS"       # bundle id，regex.match 从开头匹配
-        - type: selector
-          match:
-            code: true
+    - name_mark: all_sms
       destinations:
-        - target: bark_test
         - target: local_notify
-```
 
-`notify` 消息相比 `sms` 会额外提供以下字段供 `filters.match` 与模板使用：
-
-- `{{title}}`：通知标题
-- `{{subtitle}}`：副标题（可能为空）
-- `{{body}}`：通知正文
-- `{{sender}}`：发送通知的 App bundle id（如 `ru.keepcoder.Telegram`、`com.apple.MobileSMS`）
-- `{{receiver}}`：发送通知的 App 可读名称（如 `Telegram`、`Messages`）；无法识别时回退为 bundle id
-- `{{text}}`：上述 title/subtitle/body 用换行拼接的完整文本，也会参与验证码识别
-
-最终 `destination.name_mark` 会被写成 `notify_{rule.name_mark}_{destination.name_mark}`（与 `sms_` 前缀对称），与 `sms` 的投递进度相互独立，共同写入 `~/.config/msgflow/record.json`（以 `sms` / `notify` 为顶层键分组）。
-
-> 注意：通知中心的数据库在系统后台持续写入（WAL 模式），MsgFlow 以只读 + `immutable=1` 模式打开，不会对系统造成干扰。仍然需要对终端授予「完全磁盘访问权限」。
-
-### alarm 异常告警
-
-```yaml
 alarm:
-  strategy: until_success      # 可选，默认 until_success
-  destinations:                # 结构与 sms.rules[].destinations 一致
-    - target: tgbot_test
-      payload:
-        title: "{{source}}: {{error}}"
-        body: "{{msg}}\n\n{{traceback}}"
-        group: alarm
+  destinations:
+    - target: local_notify
 ```
 
-告警在以下场景触发：
+Start `msgflow.app` to begin listening for and forwarding messages.
 
-- 转发规则按 `strategy` 判定为失败（`until_success` 时全失败、`all` 时有失败）
-- 处理短信时抛出异常
-- 超过 24 小时未收到任何短信
+## Configuration Overview
 
----
+MsgFlow configuration is YAML and defaults to `~/.config/msgflow/config.yaml`. Debug mode reads `~/.config/msgflow/debug/config.yaml`.
 
-## 模板系统
+The main blocks are:
 
-所有字符串值都会以 `{{var}}` 语法进行渲染。`payload` 字段中的字符串若能被解析为 JSON，会先解析再递归渲染。
+- `target`: named forwarding targets, each specifying a channel.
+- `sms.rules`: SMS/iMessage forwarding rules.
+- `notify.rules`: macOS notification record forwarding rules.
+- `alarm.destinations`: alert destinations used when delivery fails or a source is silent for too long.
+- `channel`: optional shared defaults for channels.
+- `app`: optional app history retention settings.
 
-### 值条件字典
+Each destination's final config is merged from three layers, where later layers override earlier ones:
 
-对任意字段，可以用下列三个 key 的字典代替普通值，按消息类型选择分支：
+```text
+channel.<channel> < target.<name> < rule.destinations[]
+```
 
-| 键 | 生效场景 | 说明 |
-| --- | --- | --- |
-| `$default` | 兜底 | 普通消息 / 无其他分支命中时 |
-| `$code` | 含验证码 | 识别到验证码时优先使用 |
-| `$alarm` | 告警消息 | alarm 调用时优先使用 |
+See [Configuration](./docs/configuration.md) for the full config structure, template variables, filters, command-line options, and complete examples.
 
-示例：
+## Example: Forward Codes to Bark and a Floating Panel
 
 ```yaml
-payload:
-  title:
-    $default: "{{receiver}} <- {{sender}}"
-    $code: "🌀 {{code}}"
-    $alarm: "{{source}}: {{error}}"
-  body:
-    $default: "{{text}}\n{{source}} - {{time_str}}"
-    $code: "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}"
-    $alarm: "{{msg}}\n\n{{traceback}}"
-```
-
-> 约束：值条件字典只能包含 `$default`、`$code`、`$alarm` 三个 key；出现其他 key 将被当作普通 dict 处理。
-
-### 可用模板变量
-
-通用（来自短信）：
-
-- `{{sender}}`、`{{receiver}}`
-- `{{text}}`、`{{code}}`
-- `{{timestamp}}`、`{{time_str}}`
-- `{{source}}`（来自 `source` 配置）
-- `{{msg}}`（当前处理消息的 JSON 字符串）
-
-通知消息（`notify`）额外：
-
-- `{{title}}`、`{{subtitle}}`、`{{body}}`
-
-alarm 额外：
-
-- `{{error}}`：告警标题信息
-- `{{traceback}}`：异常堆栈
-
-出现未知变量将在启动时报错。
-
----
-
-## 配置合并与优先级
-
-对每个 destination，最终有效配置由以下三层 `deep_merge` 得到（后者覆盖前者）：
-
-```
-channel.<channel_name>  <  target.<target_name>  <  sms/alarm.destinations[i]
-```
-
-最终 `destination.name_mark` 会被改写为 `{{kind}}_{{rule.name_mark}}_{{destination.name_mark}}`（`kind` 为 `sms` / `notify`；`alarm.destinations` 不加前缀），用于进度记录与去重。
-
-每条消息的投递进度会写入 `~/.config/msgflow/record.json`，重启后可从上次位置继续。
-
-当前游标规则：
-
-- `sms` 使用 `message.ROWID` 作为单调递增游标，避免因 iPhone 延迟同步导致 `date` 乱序而漏发
-- `notify` 使用 `record.delivered_date` 作为单调递增游标，避免通知删除后 `rec_id` 回落造成重复或漏发
-- 首次启动或某个 destination 尚无记录时，会从数据库当前末尾开始，不回放历史消息
-- 从旧版升级到当前游标格式后，建议手动删除一次旧的 `~/.config/msgflow/record.json`
-
----
-
-## 命令行参数
-
-```
-python app.py [-d] [-c] [-m [-n N]] [-k sms|notify|all]
-```
-
-| 参数 | 说明 |
-| --- | --- |
-| `-d`, `--debug` | 启用调试模式：日志 DEBUG、加载 `debug/config.yaml`、异常不吞 |
-| `-c`, `--check` | 向所有 destinations 发送一条测试消息验证可用性 |
-| `-m`, `--mock` | 模拟触发消息转发流程（sms 从 [sms/sms.json](./sms/sms.json) 抽取；notify 从 [notify/notify.json](./notify/notify.json) 抽取） |
-| `-n`, `--num` | 配合 `-m` 使用，模拟消息条数（默认 `2`） |
-| `-k`, `--kind` | 配合 `-c` / `-m` 使用，指定对 `sms` / `notify` / `all`（默认 `all`）执行 |
-
----
-
-## 完整示例
-
-```yaml
-check_interval: 3
-source: Macmini
-
-channel:
-  bark:
-    url: https://api.day.app/notify
-  tgbot:
-    link_preview_options:
-      is_disabled: true
+source: MacBook
 
 target:
-  bark_test:
+  bark_phone:
     channel: bark
     payload:
       device_keys:
-        - xxx
+        - YOUR_BARK_KEY
       group: msgflow
-      icon: https://example.com/icon.png
 
-  pushgo_test:
-    channel: pushgo
-    channel_id: xxx
-    password: xxx
-
-  tgbot_test:
-    channel: tgbot
-    url: https://api.telegram.org/bot<TOKEN>/sendMessage
-    payload:
-      chat_id: xxx
-
-  webhook_test:
-    channel: webhook
-    method: POST
-    url: https://webhook.example.com
-    headers:
-      Content-Type: application/json
-    payload:
-      key: value
-    timeout: 5
-
-  local_notify:
-    channel: notification
-    payload:
-      title: "{{receiver}} <- {{sender}}"
-      body: "{{text}}\n{{source}} - {{time_str}}"
-      copy: "{{text}}"
-      autoCopy: 1
+  code_panel:
+    channel: floating
 
 sms:
   strategy: until_success
   rules:
-    - name_mark: default_rule
-      strategy: until_success
+    - name_mark: verification_codes
       filters:
-        - type: or
-          match:
-            receiver: "17112345678"
-            sender: "10010"
         - type: selector
           match:
             code: true
       destinations:
-        - target: bark_test
-        - target: tgbot_test
-          payload:
-            disable_notification: true
-        - target: local_notify
+        - target: code_panel
+        - target: bark_phone
 
 alarm:
-  strategy: until_success
   destinations:
-    - target: tgbot_test
-      payload:
-        title: "{{source}}: {{error}}"
-        body: "{{msg}}\n\n{{traceback}}"
-        group: alarm
+    - target: bark_phone
 ```
 
----
+## App Features
+
+- Permission setup: Accessibility and Full Disk Access.
+- Menu bar actions: Start/Pause, Reload Config, Open Config Folder, Launch at Login, Debug Mode.
+- History window: view processing records for SMS and notifications.
+- Query DSL: search by fields such as `sender`, `text`, `kind`, `status`, `trigger`, `rule`, and `dest`.
+- Config and cursors: view the effective config and edit target cursors per message kind.
+- Replay actions: Rematch & Send, Resend Destination, Delete.
+- Local presentation: native macOS notifications and verification-code floating panels with Type/Paste actions.
+
+## Important Notes
+
+- MsgFlow only reads local macOS databases; it does not modify Messages or Notification Center databases.
+- On first launch, MsgFlow starts listening from the current tail of each database and does not automatically replay historical messages.
+- Remote channel cursors are persisted; local channels (`notification`, `floating`) do not persist cursors.
+- Unsigned or non-notarized builds may trigger Gatekeeper warnings.
 
 ## Roadmap
 
-- [x] 实时读取短信数据库（`~/Library/Messages/chat.db`）
-- [x] 中文(简/繁)、英文验证码自动识别
-- [x] 多通道推送：`bark`、`tgbot`、`pushgo`、`lark`、`webhook`、`notification`
-- [x] 规则化转发（`and` / `or` / `selector` 过滤器）
-- [x] `until_success` / `all` 两种投递策略
-- [x] 异常告警通道（alarm），失败自动上报
-- [x] 基于值条件字典（`$default` / `$code` / `$alarm`）的模板系统
-- [x] pydantic 严格校验配置
-- [x] 通知消息（macOS Notification Center）的监听与转发
-- [ ] App 版本，初版支持自启动、切换监听状态等基础功能
-- [ ] App 支持浮窗显示消息、验证码，点击自动输入
-- [ ] App 支持消息转发记录，用户可查看已处理的消息、规则、目标等信息
-- [ ] App 支持消息记录的规则重新匹配、目标重新转发
+- [x] Read SMS/iMessage from macOS Messages in real time
+- [x] Automatically detect verification codes in Simplified Chinese, Traditional Chinese, and English
+- [x] Forward to Bark, Telegram Bot, PushGo, Lark, Webhook, and local notifications
+- [x] Rule-based forwarding with `and`, `or`, and `selector`
+- [x] Two delivery strategies: `until_success` / `all`
+- [x] Support exception alert notifications (alarm)
+- [x] Conditional templates based on `$default`, `$code`, and `$alarm`
+- [x] Strict Pydantic config validation
+- [x] Support listening to macOS notification messages
+- [x] App version with initial support for the menu bar, listener status switching, history window, and other basic features
+- [x] App support for floating panels that display messages and verification codes, with click-to-type/paste actions for specified content
+- [x] App support for multi-filtering records, rematching, resending a single destination, deleting records, viewing config, and editing cursors
+- [ ] App support for automatic record refresh in the main window
+- [ ] App support for multilingual UI
+- [ ] Support listening to notifications from iPhone
+
+## Documentation
+
+- [Configuration](./docs/configuration.md): full user configuration reference and examples.
+- [Development](./docs/development.md): source setup, local verification, build artifacts, and architecture notes.
 
 ## Credits
 
-- [TeavenX/py2fa](https://github.com/TeavenX/py2fa)
+- [TeavenX/py2fa](https://github.com/TeavenX/py2fa).
 
 ## License
 
-GPL
+GPL-3.0-only

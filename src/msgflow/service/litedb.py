@@ -25,17 +25,25 @@ class LiteDB(object):
         self._conn: sqlite3.Connection | None = None
 
     def _connect(self) -> sqlite3.Connection:
-        # Keep a single read-only connection per LiteDB instance so frequent
-        # poll ticks don't pay connection setup cost every time.
+        # Reuse one read-only connection per LiteDB instance. Flow creation and
+        # polling are constrained to the core main loop thread, so this cached
+        # handle is not shared across threads.
         if self._conn is not None:
             return self._conn
-
         uri = f"file:{self.db_file}?mode=ro"
         conn = sqlite3.connect(uri, uri=True, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA query_only = ON")
         self._conn = conn
         return conn
+
+    @classmethod
+    def probe_read_access(cls, db_file: str) -> None:
+        db = cls(db_file)
+        try:
+            db.select("SELECT 1")
+        finally:
+            db.close()
 
     def _disconnect(self) -> None:
         if self._conn is None:
@@ -50,9 +58,9 @@ class LiteDB(object):
             conn = self._connect()
             rows = conn.execute(sql, params).fetchall()
         except sqlite3.Error:
-            # Long-lived read-only connections can occasionally go stale if the
-            # system rotates the DB or SQLite surfaces a transient error. Drop
-            # the handle and retry once with a fresh connection.
+            # Retry once with a brand-new handle so transient read errors (for
+            # example while the system rotates the DB/WAL state) do not fail
+            # the whole polling tick.
             self._disconnect()
             conn = self._connect()
             rows = conn.execute(sql, params).fetchall()

@@ -1,4 +1,4 @@
-import os, re, yaml, copy
+import copy, re, yaml
 from typing import (
     Optional,
     Any,
@@ -21,29 +21,25 @@ from pydantic import (
     StrictInt,
     model_validator,
 )
-from channels import (
+from ..service.channels import (
     LOCAL_CHANNELS,
     AVAILABLE_CHANNELS,
     REQ_CHANNELS,
 )
-from template import (
+from ..common.paths import config_root_dir, config_file_path, history_file_path
+from ..common.templating import (
     ALLOWED_MATCH_TPL_VARS,
     ALLOWED_COND_KEYS,
     collect_tpl_vars,
     render_value,
 )
-from utils import deep_merge_dicts
-from defaults import CONFIG_DEFAULTS
+from ..common.utils import deep_merge_dicts
+from .defaults import CONFIG_DEFAULTS, CONFIG_TEMPLATE
 
 # Global singleton populated by `app.main` once CLI args are parsed.
 # Modules that need config access read `config.cfg` lazily to avoid import
 # cycles with msgflow/channels.
 cfg: Optional["Config"] = None
-
-config_dir_default = '~/.config/msgflow'
-config_dir_debug = f"{config_dir_default}/debug"
-config_file = 'config.yaml'
-record_file = 'record.json'
 
 # Narrow type aliases used by the pydantic schema below. Using Literal[...] on
 # tuples of allowed channel names lets pydantic produce precise error messages
@@ -66,8 +62,8 @@ class _BaseCfgModel(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
-class LocalPayloadModel(_BaseCfgModel):
-    """Payload schema for local-notification destinations."""
+class NotificationPayloadModel(_BaseCfgModel):
+    """Payload schema for app-backed local notifications."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     title: CondValue
@@ -77,6 +73,15 @@ class LocalPayloadModel(_BaseCfgModel):
     # `copy_` with alias="copy" to keep the config key human-friendly.
     copy_: Optional[CondValue] = Field(default=None, alias="copy")
     autoCopy: Optional[CondValue] = None
+
+
+class FloatingPayloadModel(_BaseCfgModel):
+    """Payload schema for app-backed floating panels."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    title: CondValue
+    body: CondValue
+    input: CondValue
 
 
 class BuiltDestinationBase(_BaseCfgModel):
@@ -103,13 +108,34 @@ class BuiltDestinationBase(_BaseCfgModel):
         return self
 
 
-class LocalDestinationModel(BuiltDestinationBase):
-    """Destination bound to a local channel (e.g. macOS notification)."""
+PayloadT = TypeVar("PayloadT")
 
-    channel: LocalChannel
-    payload: LocalPayloadModel
-    sms: Optional[LocalPayloadModel] = None
-    notify: Optional[LocalPayloadModel] = None
+
+class LocalKindOverrideModel(_BaseCfgModel, Generic[PayloadT]):
+    """Kind-specific override block shared by app-backed local channels."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    payload: PayloadT
+
+
+class LocalDestinationModel(BuiltDestinationBase, Generic[PayloadT]):
+    """Shared destination shape for app-backed local channels."""
+
+    payload: PayloadT
+    sms: Optional[LocalKindOverrideModel[PayloadT]] = None
+    notify: Optional[LocalKindOverrideModel[PayloadT]] = None
+
+
+class NotificationDestinationModel(LocalDestinationModel[NotificationPayloadModel]):
+    """Destination bound to the app-backed local notification channel."""
+
+    channel: Literal["notification"]
+
+
+class FloatingDestinationModel(LocalDestinationModel[FloatingPayloadModel]):
+    """Destination bound to the app-backed floating panel channel."""
+
+    channel: Literal["floating"]
 
 
 class ReqDestinationModel(BuiltDestinationBase):
@@ -151,7 +177,7 @@ class ReqDestinationModel(BuiltDestinationBase):
 # A destination is one of the two concrete shapes above; the `channel` field
 # acts as the pydantic discriminator so only the matching model runs.
 BuiltDestinationModel: TypeAlias = Annotated[
-    Union[LocalDestinationModel, ReqDestinationModel],
+    Union[NotificationDestinationModel, FloatingDestinationModel, ReqDestinationModel],
     Field(discriminator="channel"),
 ]
 
@@ -222,6 +248,23 @@ class AlarmModel(_BaseCfgModel, Generic[DestT]):
     destinations: List[DestT] = Field(default_factory=list)
 
 
+class AppRetentionKindModel(_BaseCfgModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    mode: Literal["count", "days"]
+    value: int = Field(ge=1)
+
+
+class AppRetentionModel(_BaseCfgModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    sms: AppRetentionKindModel
+    notify: AppRetentionKindModel
+
+
+class AppModel(_BaseCfgModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    retention: AppRetentionModel
+
+
 class TargetModel(_BaseCfgModel):
     channel: Channel
 
@@ -233,6 +276,7 @@ class CfgModel(_BaseCfgModel, Generic[DestT]):
     sms: SMSModel[DestT]
     notify: NotifyModel[DestT]
     alarm: AlarmModel[DestT]
+    app: AppModel
 
 
 # Two concrete config shapes:
@@ -260,12 +304,14 @@ class Config:
         # object is fully usable right after construction.
         self.debug_mode = debug
 
-    def _update_cfg(self, config_dir: str) -> None:
+    def _update_cfg(self, debug: bool) -> None:
         # Load YAML, merge with defaults and build the resolved destination tree.
         # Splitting this into a separate method (instead of doing it inline in
         # `__init__`) lets the `debug_mode` setter re-run it when toggled.
-        self.config_file_path = os.path.expanduser(f"{config_dir}/{config_file}")
-        self.record_file_path = os.path.expanduser(f"{config_dir}/{record_file}")
+        self.config_root_dir = str(config_root_dir())
+        self.config_file_path = str(config_file_path(debug))
+        self.history_file_path = str(history_file_path(debug))
+        self._ensure_config_files(debug)
         with open(self.config_file_path, 'r') as fp:
             self.user_cfg: Dict[str, Any] = yaml.safe_load(fp) or {}
         self.effective_cfg: Dict[str, Any] = deep_merge_dicts(self.default_cfg, self.user_cfg)
@@ -283,6 +329,12 @@ class Config:
         self.built_cfg: Dict[str, Any] = deep_merge_dicts(self.effective_cfg, built_overlay)
         self._validate_built_cfg()
 
+    def _ensure_config_files(self, debug: bool) -> None:
+        config_path = config_file_path(debug)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        if not config_path.exists():
+            config_path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+
     @property
     def debug_mode(self) -> bool:
         return self._debug_mode
@@ -292,10 +344,7 @@ class Config:
         # Swapping debug mode also swaps the config directory, so we reload
         # everything to keep the object consistent with the new source path.
         self._debug_mode = value
-        if self._debug_mode:
-            self._update_cfg(config_dir_debug)
-        else:
-            self._update_cfg(config_dir_default)
+        self._update_cfg(debug=self._debug_mode)
 
     def _resolve_destination(self, destination: Dict[str, Any], kind: Optional[str] = None) -> Dict[str, Any]:
         # Merge precedence (low -> high):
@@ -330,7 +379,7 @@ class Config:
         kind: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         # Resolve every destination in a rule and ensure their final
-        # `name_mark`s are unique (so record.json keys don't collide).
+        # `name_mark`s are unique (so cursor-state keys don't collide).
         built: List[Dict[str, Any]] = []
         name_marks: set[str] = set()
         for idx, dest in enumerate(destinations):

@@ -1,10 +1,15 @@
 *test*
+!tests/
+!tests/**
 *.pyc
-*.spec
 .eggs/*
+*.egg-info/
 __pycache__/*
 build*/*
 dist*/*
+release/
+.pyinstaller-cache/
 *.yaml
 *DS_Store*
 .venv
+!packaging/pyinstaller/*.spec

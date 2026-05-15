@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "msgflow"
+version = "0.1.0"
+description = "macOS message forwarding service and menu bar app"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-only" }
+authors = [{ name = "axel" }]
+dependencies = [
+  "apscheduler",
+  "pydantic",
+  "pyobjc",
+  "pyperclip",
+  "pytypedstream",
+  "pyyaml",
+  "regex",
+  "requests",
+]
+
+[project.urls]
+GitHub = "https://github.com/axelburks/msgflow"
+
+[project.scripts]
+msgflow = "msgflow.core:main"
+msgflow-app = "msgflow.app:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+msgflow = [
+  "resources/*.icns",
+  "resources/assets/*.js",
+]

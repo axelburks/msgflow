@@ -1,15 +1,12 @@
-import os, plistlib, logging
+import plistlib, logging
 from typing import Any, Optional
 
-from msgflow import MsgFlow
-from litedb import LiteDB
-from utils import get_app_name, format_ts, MAC_EPOCH_OFFSET
+from .base import MsgFlow
+from ..litedb import LiteDB
+from ...common.paths import notify_db_path
+from ...common.utils import get_app_name, format_ts, MAC_EPOCH_OFFSET
 
 logger = logging.getLogger(__name__)
-
-notify_db_file_path = os.path.expanduser(
-    '~/Library/Group Containers/group.com.apple.usernoted/db2/db'
-)
 
 
 def _extract_req_field(req: Any, key: str) -> Optional[str]:
@@ -54,11 +51,10 @@ class NotifyFlow(MsgFlow):
     # are dismissed/deleted — `delivered_date` is unaffected by row deletions,
     # making it a correct monotonic cursor.
     CURSOR_FIELD = "delivered_date"
-    MOCK_FILE = "./notify/notify.json"
 
-    def __init__(self) -> None:
-        self.db = LiteDB(db_file=notify_db_file_path)
-        super().__init__()
+    def __init__(self, runtime: Any = None) -> None:
+        self.db = LiteDB(db_file=str(notify_db_path()))
+        super().__init__(runtime=runtime)
 
     def initial_cursor(self) -> float:
         # Start fresh destinations at current DB tail (most recent delivery
@@ -131,5 +127,4 @@ class NotifyFlow(MsgFlow):
             except Exception as e:
                 logger.error(f"❌ notify row parse error: {e}")
                 continue
-
         return results

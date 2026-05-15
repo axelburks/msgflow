@@ -1,12 +1,10 @@
-import os
 from typing import Any
 import typedstream
 
-from msgflow import MsgFlow
-from litedb import LiteDB
-from utils import MAC_EPOCH_OFFSET, format_ts
-
-sms_db_file_path = os.path.expanduser('~/Library/Messages/chat.db')
+from .base import MsgFlow
+from ..litedb import LiteDB
+from ...common.paths import sms_db_path
+from ...common.utils import MAC_EPOCH_OFFSET, format_ts
 
 
 def _extract_from_applearchive(archived_object: bytes) -> str:
@@ -35,13 +33,12 @@ class SMSFlow(MsgFlow):
     # "forward once per row" semantics — even if `date` is older (e.g. SMS
     # that synced late from a flaky iPhone network).
     CURSOR_FIELD = "rowid"
-    MOCK_FILE = "./sms/sms.json"
     # chat.db stores `message.date` in nanoseconds of Mac absolute time.
     _NS_PER_SEC = 1_000_000_000
 
-    def __init__(self) -> None:
-        self.db = LiteDB(db_file=sms_db_file_path)
-        super().__init__()
+    def __init__(self, runtime: Any = None) -> None:
+        self.db = LiteDB(db_file=str(sms_db_path()))
+        super().__init__(runtime=runtime)
 
     def initial_cursor(self) -> int:
         # Start fresh destinations at current DB tail so we don't replay history.
