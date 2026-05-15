@@ -29,8 +29,13 @@ MsgFlow is a macOS message forwarding app. It listens for SMS and notification m
 The app version is recommended because it provides floating panels, verification-code input actions, permission setup, and history viewing.
 
 ```bash
-brew tap axelburks/tap
-brew install --cask msgflow-app
+brew install axelburks/tap/msgflow-app
+```
+
+Upgrade:
+
+```bash
+brew upgrade msgflow-app
 ```
 
 Open `msgflow.app`, grant the requested permissions, then open the config folder from the menu bar item.
@@ -40,8 +45,18 @@ Open `msgflow.app`, grant the requested permissions, then open the config folder
 Use the CLI if you prefer running the listener as a background service.
 
 ```bash
-brew tap axelburks/tap
-brew install msgflow
+brew install axelburks/tap/msgflow
+```
+
+Upgrade:
+
+```bash
+brew upgrade msgflow
+```
+
+Start the background service:
+
+```bash
 brew services start msgflow
 ```
 

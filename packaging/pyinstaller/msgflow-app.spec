@@ -45,11 +45,17 @@ exe = EXE(
     name="msgflow-app",
     console=False,
 )
-app = BUNDLE(
+coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
     a.datas,
+    strip=False,
+    upx=False,
+    name="msgflow-app",
+)
+app = BUNDLE(
+    coll,
     name="msgflow.app",
     icon=str(APP_ICON),
     bundle_identifier="com.axel.msgflow",

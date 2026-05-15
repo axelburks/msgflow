@@ -29,8 +29,13 @@ MsgFlow 是一个 macOS 消息转发 App。它会监听设备收到的短信和�
 推荐优先使用 App 版本，因为它提供浮窗、输入验证码、权限引导和查看历史记录。
 
 ```bash
-brew tap axelburks/tap
-brew install --cask msgflow-app
+brew install axelburks/tap/msgflow-app
+```
+
+升级：
+
+```bash
+brew upgrade msgflow-app
 ```
 
 打开 `msgflow.app`，按引导授权，然后从菜单栏打开配置目录。
@@ -40,8 +45,18 @@ brew install --cask msgflow-app
 如果你更希望把监听器作为后台服务运行，可以安装 CLI。
 
 ```bash
-brew tap axelburks/tap
-brew install msgflow
+brew install axelburks/tap/msgflow
+```
+
+升级：
+
+```bash
+brew upgrade msgflow
+```
+
+启动后台服务：
+
+```bash
 brew services start msgflow
 ```
 

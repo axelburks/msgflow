@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 from pathlib import Path
 
 
@@ -81,6 +82,63 @@ def bundle_core_binary() -> None:
     target_binary.chmod(0o755)
 
 
+def verify_app_launches(app_bundle: Path, *, config_dir: Path | None = None) -> None:
+    app_binary = app_bundle / "Contents" / "MacOS" / "msgflow-app"
+    if not app_binary.exists():
+        raise FileNotFoundError(f"missing app executable: {app_binary}")
+    env = dict(os.environ)
+    if config_dir is not None:
+        env["MSGFLOW_CONFIG_DIR"] = str(config_dir)
+    process = subprocess.Popen(
+        [str(app_binary)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=6)
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        try:
+            process.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+        return
+    raise RuntimeError(
+        f"app exited during launch smoke test with code {process.returncode}\n"
+        f"stdout:\n{stdout}\n"
+        f"stderr:\n{stderr}"
+    )
+
+
+def verify_app_archive_launches(app_zip: Path) -> None:
+    with tempfile.TemporaryDirectory(prefix="msgflow-app-smoke-") as temp_dir:
+        run(["ditto", "-x", "-k", str(app_zip), temp_dir])
+        verify_app_launches(Path(temp_dir) / "msgflow.app", config_dir=Path(temp_dir) / "config")
+
+
+def find_codesigning_identity() -> str | None:
+    configured_identity = os.environ.get("APPLE_SIGNING_IDENTITY")
+    if configured_identity:
+        return configured_identity
+    result = subprocess.run(
+        ["security", "find-identity", "-v", "-p", "codesigning"],
+        cwd=ROOT_DIR,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    for line in result.stdout.splitlines():
+        if "Developer ID Application" not in line:
+            continue
+        match = re.search(r'"([^"]+)"', line)
+        if match is not None:
+            return match.group(1)
+    return None
+
+
 def codesign_app(app_bundle: Path, identity: str) -> None:
     run(
         [
@@ -132,9 +190,10 @@ def archive_app(version: str, arch: str, out_dir: Path) -> Path:
     app_bundle = DIST_DIR / "msgflow.app"
     if not app_bundle.exists():
         raise FileNotFoundError(f"missing app bundle: {app_bundle}")
-    archive_base = out_dir / f"msgflow-app-{version}-macos-{arch}"
-    zip_path = shutil.make_archive(str(archive_base), "zip", root_dir=DIST_DIR, base_dir="msgflow.app")
-    return Path(zip_path)
+    archive_path = out_dir / f"msgflow-app-{version}-macos-{arch}.zip"
+    archive_path.unlink(missing_ok=True)
+    run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", "msgflow.app", str(archive_path)], cwd=DIST_DIR)
+    return archive_path
 
 
 def main() -> None:
@@ -170,16 +229,20 @@ def main() -> None:
         build_pyinstaller("msgflow-core.spec", version)
         build_pyinstaller("msgflow-app.spec", version)
         bundle_core_binary()
-        signing_identity = os.environ.get("APPLE_SIGNING_IDENTITY")
+        with tempfile.TemporaryDirectory(prefix="msgflow-app-smoke-") as temp_dir:
+            verify_app_launches(DIST_DIR / "msgflow.app", config_dir=Path(temp_dir) / "config")
+        signing_identity = find_codesigning_identity()
         if signing_identity:
             codesign_app(DIST_DIR / "msgflow.app", signing_identity)
 
     cli_archive = archive_cli(version, arch, out_dir)
     app_archive = archive_app(version, arch, out_dir)
+    verify_app_archive_launches(app_archive)
     notarize_app(app_archive)
     if os.environ.get("APPLE_ID") and os.environ.get("APPLE_APP_SPECIFIC_PASSWORD") and os.environ.get("APPLE_TEAM_ID"):
         app_archive.unlink(missing_ok=True)
         app_archive = archive_app(version, arch, out_dir)
+        verify_app_archive_launches(app_archive)
 
     homepage = f"https://github.com/{args.repo}" if args.repo else "https://github.com/axel/msgflow"
     release_base_url = f"{homepage}/releases/download/{tag}" if args.repo else ""

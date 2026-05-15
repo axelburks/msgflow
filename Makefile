@@ -10,7 +10,7 @@ NOTIFY_FIXTURE ?= $(FIXTURE_DIR)/notify/notify.json
 TEST ?= tests
 
 .PHONY: help venv install install-build install-test verify test test-verbose run-core run-core-debug run-app check \
-	mock-sms mock-notify mock-all build smoke-cli smoke-core smoke-app smoke-all clean
+	mock-sms mock-notify mock-all build smoke-cli smoke-core smoke-app smoke-homebrew smoke-all clean
 
 help:
 	@echo "Available targets:"
@@ -32,6 +32,7 @@ help:
 	@echo "  make smoke-cli       - run packaged CLI binaries"
 	@echo "  make smoke-core      - run packaged core binary"
 	@echo "  make smoke-app       - open packaged .app"
+	@echo "  make smoke-homebrew - verify the Homebrew app zip after extraction"
 	@echo "  make smoke-all       - run smoke checks on all packaged outputs"
 	@echo "  make clean           - remove build artifacts"
 
@@ -91,9 +92,13 @@ smoke-core:
 smoke-app:
 	open dist/msgflow.app
 
+smoke-homebrew:
+	$(PYTHON) scripts/release.py --skip-build --out-dir release
+
 smoke-all: smoke-cli smoke-core
 	@echo "Packaged CLI binaries look runnable."
 	@echo "Run 'make smoke-app' to open the packaged app."
+	@echo "Run 'make smoke-homebrew' to verify the Homebrew app zip."
 
 clean:
 	rm -rf build dist release .pyinstaller-cache src/*.egg-info
