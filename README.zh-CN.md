@@ -6,7 +6,7 @@ MsgFlow 是一个 macOS 消息转发 App。它会监听设备收到的短信和�
 
 ## 主要特性
 
-- **多消息源**：读取 `~/Library/Messages/chat.db` 中的短信/iMessage，以及 `~/Library/Group Containers/group.com.apple.usernoted/db2/db` 中的 macOS 通知记录。
+- **多消息源**：读取 `~/Library/Messages/chat.db` 中的短信/iMessage、`~/Library/Group Containers/group.com.apple.usernoted/db2/db` 中的 macOS 通知记录，以及 `~/Library/Group Containers/group.com.apple.UserNotifications/Library/UserNotifications/Remote/default` 中的 iPhone 镜像通知。
 - **验证码识别**：支持中文简体、中文繁体和英文验证码识别，并可为验证码单独渲染模板。
 - **规则化转发**：通过 `and`、`or`、`selector` 过滤器，按正则和消息字段路由到不同目标。
 - **多通道投递**：支持 `bark`、`tgbot`、`pushgo`、`lark`、`webhook`、`notification`、`floating`。
@@ -20,7 +20,8 @@ MsgFlow 是一个 macOS 消息转发 App。它会监听设备收到的短信和�
 - 监听进程需要「完全磁盘访问权限」，否则无法读取短信和通知记录。
 - 使用浮窗以及 Type/Paste 动作时，需要「辅助功能」权限。
 - 如需转发 iPhone 短信，需要让短信出现在 Mac 的 Messages 中，例如启用 iCloud Messages 或短信转发。
-- 如需转发通知，需要目标通知已经出现在 macOS 通知中心。
+- 如需转发 macOS 通知，需要目标通知已经出现在 macOS 通知中心。
+- 如需转发 iPhone 通知，需要在 macOS 和 iOS 设置中启用 iPhone 镜像通知转发。
 
 ## 安装
 
@@ -117,6 +118,7 @@ MsgFlow 使用 YAML 配置，默认路径为 `~/.config/msgflow/config.yaml`。D
 - `target`：命名转发目标，每个目标指定一个 channel。
 - `sms.rules`：短信/iMessage 转发规则。
 - `notify.rules`：macOS 通知记录转发规则。
+- `ipn.rules`：iPhone 镜像通知转发规则。
 - `alarm.destinations`：投递失败或消息源长时间静默时使用的告警目标。
 - `channel`：可选的通道公共默认配置。
 - `app`：可选的 App 历史记录保留策略。
@@ -124,7 +126,7 @@ MsgFlow 使用 YAML 配置，默认路径为 `~/.config/msgflow/config.yaml`。D
 每个 destination 的最终配置由三层合并得到，后者覆盖前者：
 
 ```text
-channel.<channel> < target.<name> < rule.destinations[]
+channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
 ```
 
 完整配置结构、模板变量、过滤器、命令行参数和完整示例见 [配置文档](./docs/configuration.zh-CN.md)。
@@ -166,7 +168,7 @@ alarm:
 
 - 权限引导：辅助功能、完全磁盘访问。
 - 菜单栏操作：Start/Pause、Reload Config、Open Config Folder、Launch at Login、Debug Mode。
-- 历史记录窗口：查看短信和通知的处理记录。
+- 历史记录窗口：查看短信、macOS 通知和 iPhone 通知的处理记录。
 - 查询 DSL：按 `sender`、`text`、`kind`、`status`、`trigger`、`rule`、`dest` 等字段搜索。
 - 配置与游标：查看最终生效配置，编辑每类消息源的目标游标。
 - 重放操作：Rematch & Send、Resend Destination、Delete。
@@ -174,8 +176,8 @@ alarm:
 
 ## 注意事项
 
-- MsgFlow 只读取本机 macOS 数据库，不会修改 Messages 或通知中心数据库。
-- 首次启动会从每个数据库当前末尾开始监听，不会自动回放历史消息。
+- MsgFlow 只读取本机 macOS 数据源，不会修改 Messages、通知中心数据库或 iPhone 通知文件。
+- 首次启动会从每个消息源当前末尾开始监听，不会自动回放历史消息。
 - 远端通道游标会持久化；本地通道（`notification`、`floating`）不会持久化游标。
 - 未签名或未公证的构建可能触发 Gatekeeper 提示。
 
@@ -195,7 +197,7 @@ alarm:
 - [x] App 支持记录多重筛选、重新匹配、单目标重发、删除记录、查看配置和编辑游标
 - [x] rpc 更换为 unix socket
 - [x] App 支持多语言界面
-- [ ] 支持监听来自 iPhone 的通知
+- [x] 支持监听来自 iPhone 的通知
 - [ ] App 自动签名构建产物
 
 ## 文档

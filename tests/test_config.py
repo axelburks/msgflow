@@ -44,6 +44,15 @@ notify:
             title: ".*"
       destinations:
         - target: mac
+ipn:
+  rules:
+    - name_mark: mirrored
+      filters:
+        - type: selector
+          match:
+            text: true
+      destinations:
+        - target: mac
 alarm:
   destinations:
     - target: mac
@@ -55,6 +64,7 @@ alarm:
 
     assert cfg.built_cfg["sms"]["rules"][0]["destinations"][0]["name_mark"] == "sms_code_local"
     assert cfg.built_cfg["notify"]["rules"][0]["destinations"][0]["name_mark"] == "notify_important_mac"
+    assert cfg.built_cfg["ipn"]["rules"][0]["destinations"][0]["name_mark"] == "ipn_mirrored_mac"
     assert cfg.built_cfg["alarm"]["destinations"][0]["name_mark"] == "mac"
 
 

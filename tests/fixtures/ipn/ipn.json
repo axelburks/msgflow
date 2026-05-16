@@ -1,0 +1,13 @@
+[
+  {
+    "sender": "com.example.ios",
+    "receiver": "com.example.ios",
+    "title": "Example",
+    "subtitle": "",
+    "body": "Your verification code is 123456.",
+    "text": "Example\nYour verification code is 123456.",
+    "app_uuid": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+    "notification_id": "fixture-1",
+    "code_expected": "123456"
+  }
+]

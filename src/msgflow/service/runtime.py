@@ -1,15 +1,17 @@
 import threading
 import time
 import logging
+import os
 from pathlib import Path
 from typing import Any, Optional
 
 from .. import config
 from ..common.authorization import resolve_full_disk_access_target
-from ..common.paths import notify_db_path, sms_db_path
+from ..common.paths import ipn_remote_path, notify_db_path, sms_db_path
 from ..common.run_models import MESSAGE_KINDS, RunQueryFilters
 from .history import HistoryStore
 from .flows.notify import NotifyFlow
+from .flows.ipn import IPNFlow
 from .flows.sms import SMSFlow
 from .litedb import LiteDB
 
@@ -24,11 +26,17 @@ def _notify_enabled() -> bool:
     return bool(config.cfg and config.cfg.built_cfg.get("notify", {}).get("rules"))
 
 
+def _ipn_enabled() -> bool:
+    return bool(config.cfg and config.cfg.built_cfg.get("ipn", {}).get("rules"))
+
+
 def _source_display_name(kind: str) -> str:
     if kind == "sms":
         return "SMS"
     if kind == "notify":
         return "Notify"
+    if kind == "ipn":
+        return "IPN"
     return kind
 
 
@@ -54,6 +62,7 @@ class CoreRuntime(object):
         self._control_lock = threading.Lock()
         self._control_event = threading.Event()
         self._pending_command: str | None = None
+        self._pending_source_checks: set[str] = set()
         self.refresh_runtime_health(build_flows=True)
 
     def bind_loop_thread(self) -> None:
@@ -83,13 +92,45 @@ class CoreRuntime(object):
     def wait_for_control_signal(self, timeout: float) -> bool:
         return self._control_event.wait(timeout=max(0.0, timeout))
 
+    def request_source_check(self, kind: str) -> None:
+        with self._control_lock:
+            self._pending_source_checks.add(kind)
+            self._control_event.set()
+
+    def pop_pending_source_checks(self) -> set[str]:
+        with self._control_lock:
+            checks = set(self._pending_source_checks)
+            self._pending_source_checks.clear()
+            if self._pending_command is None:
+                self._control_event.clear()
+            return checks
+
     def _enabled_source_checks(self) -> list[tuple[str, Path]]:
         checks: list[tuple[str, Path]] = []
         if _sms_enabled():
             checks.append(("sms", sms_db_path()))
         if _notify_enabled():
             checks.append(("notify", notify_db_path()))
+        if _ipn_enabled():
+            checks.append(("ipn", ipn_remote_path()))
         return checks
+
+    def _probe_source_access(self, kind: str, path: Path) -> None:
+        if kind in ("sms", "notify"):
+            LiteDB.probe_read_access(str(path))
+            return
+        if kind == "ipn":
+            if not path.exists():
+                raise FileNotFoundError(path)
+            library_path = path / "Library.plist"
+            if library_path.exists():
+                with open(library_path, "rb"):
+                    pass
+            else:
+                with os.scandir(path):
+                    pass
+            return
+        raise ValueError(f"unknown source kind: {kind}")
 
     def _permission_issue(self, kind: str, db_path: Path, error: Exception) -> dict[str, Any]:
         authorization_target = resolve_full_disk_access_target()
@@ -124,7 +165,7 @@ class CoreRuntime(object):
         issues: list[dict[str, Any]] = []
         for kind, db_path in self._enabled_source_checks():
             try:
-                LiteDB.probe_read_access(str(db_path))
+                self._probe_source_access(kind, db_path)
             except Exception as e:
                 issues.append(self._permission_issue(kind, db_path, e))
         return issues
@@ -168,7 +209,7 @@ class CoreRuntime(object):
             self._set_runtime_error("flow_init_failed", str(e))
             return False
         if not self.flows and build_flows:
-            self._set_runtime_error("no_enabled_flows", "No SMS or Notify rules are configured, nothing to monitor.")
+            self._set_runtime_error("no_enabled_flows", "No SMS, Notify or iPhone rules are configured, nothing to monitor.")
             return False
         if self.status == "error":
             self.status = "running"
@@ -189,6 +230,8 @@ class CoreRuntime(object):
             self.flows.append(SMSFlow(runtime=self))
         if _notify_enabled():
             self.flows.append(NotifyFlow(runtime=self))
+        if _ipn_enabled():
+            self.flows.append(IPNFlow(runtime=self))
 
     def ensure_flows_built(self) -> None:
         if not self.flows:
@@ -339,18 +382,18 @@ class CoreRuntime(object):
         deleted = 0
         has_count_mode = any(
             isinstance(self.retention.get(kind), dict) and self.retention.get(kind, {}).get("mode") == "count"
-            for kind in ("sms", "notify")
+            for kind in MESSAGE_KINDS
         )
         has_days_mode = any(
             isinstance(self.retention.get(kind), dict) and self.retention.get(kind, {}).get("mode") == "days"
-            for kind in ("sms", "notify")
+            for kind in MESSAGE_KINDS
         )
         if has_count_mode:
             if not force and self.insert_since_last_cleanup < self.CLEANUP_COUNT_INTERVAL:
                 has_count_mode = False
             else:
                 self.insert_since_last_cleanup = 0
-                for kind in ("sms", "notify"):
+                for kind in MESSAGE_KINDS:
                     retention = self.retention.get(kind)
                     if not isinstance(retention, dict) or retention.get("mode") != "count":
                         continue
@@ -364,7 +407,7 @@ class CoreRuntime(object):
                 has_days_mode = False
             else:
                 self.last_cleanup_at = now
-                for kind in ("sms", "notify"):
+                for kind in MESSAGE_KINDS:
                     retention = self.retention.get(kind)
                     if not isinstance(retention, dict) or retention.get("mode") != "days":
                         continue

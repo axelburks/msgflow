@@ -28,6 +28,7 @@ App 会在同一个配置根目录下保存历史记录和日志。
 | `target` | 是 | - | 由规则引用的命名转发目标。 |
 | `sms` | 否 | 内置 | 短信/iMessage 转发规则。 |
 | `notify` | 否 | 内置 | macOS 通知记录转发规则。 |
+| `ipn` | 否 | 内置 | iPhone 镜像通知转发规则。 |
 | `alarm` | 否 | 内置 | 失败和静默告警的投递目标。 |
 | `app` | 否 | 内置 | App 历史记录保留设置。 |
 
@@ -132,7 +133,7 @@ destinations:
 channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
 ```
 
-`<kind>` 覆盖层可以是 `sms` 或 `notify`，用于让同一通道针对不同消息源使用不同默认值。
+`<kind>` 覆盖层可以是 `sms`、`notify` 或 `ipn`，用于让同一通道针对不同消息源使用不同默认值。
 
 ## 短信规则
 
@@ -201,6 +202,39 @@ notify:
 | `text` | 由 `title`、`subtitle` 和 `body` 拼接而成，也用于验证码识别。 |
 | `rec_id` | 通知记录 id。 |
 | `delivered_date` | 原始 macOS 投递时间戳，用作游标。 |
+
+## iPhone 通知规则
+
+`ipn.rules` 处理通过 iPhone 镜像同步到 macOS 的 iPhone 通知。配置至少一条 ipn 规则后才会启用。
+
+```yaml
+ipn:
+  strategy: until_success
+  rules:
+    - name_mark: iphone_codes
+      filters:
+        - type: selector
+          match:
+            text: true
+      destinations:
+        - target: local_notify
+        - target: bark_phone
+```
+
+iPhone 通知字段包含所有通用模板字段，并额外包含：
+
+| 字段 | 说明 |
+| --- | --- |
+| `sender` | iPhone App bundle id，例如 `com.example.ios`。 |
+| `receiver` | 当前与 `sender` 相同；后续可解析显示名时会用于展示名称。 |
+| `title` | 通知标题。 |
+| `subtitle` | 可用时为通知副标题或 footer。 |
+| `body` | 通知正文。 |
+| `text` | 由 `title`、`subtitle` 和 `body` 拼接而成，也用于验证码识别。 |
+| `app_uuid` | 远端通知存储中的 UUID 目录名。 |
+| `notification_id` | iPhone 通知标识。 |
+| `ipn_cursor` | 由 `AppNotificationCreationDate` 转换得到的 Unix 微秒游标。 |
+| `created_at` | 来自 `AppNotificationCreationDate` 的原始 Unix 时间戳。 |
 
 ## 过滤器
 
@@ -320,6 +354,9 @@ app:
     notify:
       mode: days
       value: 30
+    ipn:
+      mode: days
+      value: 30
 ```
 
 `mode` 可以是 `count` 或 `days`。
@@ -327,7 +364,7 @@ app:
 ## 命令行参数
 
 ```bash
-msgflow [-d] [-c] [-m [-n N]] [-k sms|notify|all]
+msgflow [-d] [-c] [-m [-n N]] [-k sms|notify|ipn|all]
 ```
 
 | 参数 | 说明 |
@@ -335,10 +372,10 @@ msgflow [-d] [-c] [-m [-n N]] [-k sms|notify|all]
 | `-d`, `--debug` | 使用 debug 配置、DEBUG 日志和完整 traceback。 |
 | `-c`, `--check` | 向配置的 destinations 发送测试消息。 |
 | `-m`, `--mock` | 通过转发流水线重放 fixture 消息。 |
-| `--fixture-file` | 单一消息类型的 JSON fixture 文件；与 `--kind sms` 或 `--kind notify` 配合使用。 |
-| `--fixture-dir` | fixture 目录；当 `--kind all` 时，其中应包含 `sms/sms.json` 和 `notify/notify.json`。 |
+| `--fixture-file` | 单一消息类型的 JSON fixture 文件；与 `--kind sms`、`--kind notify` 或 `--kind ipn` 配合使用。 |
+| `--fixture-dir` | fixture 目录；当 `--kind all` 时，其中应包含已启用类型的 fixture。 |
 | `-n`, `--num` | 要重放的 mock 消息数量，默认 `2`。 |
-| `-k`, `--kind` | check/mock 的目标类型：`sms`、`notify` 或 `all`，默认 `all`。 |
+| `-k`, `--kind` | check/mock 的目标类型：`sms`、`notify`、`ipn` 或 `all`，默认 `all`。 |
 
 示例：
 
@@ -425,6 +462,18 @@ notify:
         - target: local_notify
         - target: bark_phone
 
+ipn:
+  strategy: until_success
+  rules:
+    - name_mark: iphone_notifications
+      filters:
+        - type: selector
+          match:
+            text: true
+      destinations:
+        - target: local_notify
+        - target: bark_phone
+
 alarm:
   strategy: until_success
   destinations:
@@ -438,6 +487,7 @@ alarm:
 
 - `sms` 使用 `message.ROWID` 作为游标，因此 iPhone 延迟同步时，不会跳过较早时间但较晚到达的消息。
 - `notify` 使用 `record.delivered_date`，因为通知记录 id 可能在行被删除后复用。
+- `ipn` 使用由 `AppNotificationCreationDate` 转换得到的 Unix 微秒游标，并通过文件变更触发，另有周期性兜底扫描。
 - 新 destinations 会从当前数据库末尾开始，不会自动回放历史消息。
 - 远端通道游标会持久化到 `~/.config/msgflow/history/history.db`。
 - 仅本地通道（`notification`、`floating`）会在重启时从当前数据库末尾开始，以避免重复本地提醒。

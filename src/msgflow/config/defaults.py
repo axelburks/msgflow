@@ -11,6 +11,10 @@ CONFIG_DEFAULTS = {
                 "mode": "days",
                 "value": 30,
             },
+            "ipn": {
+                "mode": "days",
+                "value": 30,
+            },
         },
     },
     "target": {},
@@ -18,6 +22,9 @@ CONFIG_DEFAULTS = {
         "strategy": "until_success",
     },
     "notify": {
+        "strategy": "until_success",
+    },
+    "ipn": {
         "strategy": "until_success",
     },
     "alarm": {
@@ -73,6 +80,20 @@ CONFIG_DEFAULTS = {
                     },
                 },
             },
+            "ipn": {
+                "payload": {
+                    "title": {
+                        "$default": "{{receiver}}: {{title}}",
+                    },
+                    "body": {
+                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
+                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                    "copy": {
+                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                },
+            },
         },
         "pushgo": {
             "logmarker": "🌸",
@@ -91,6 +112,17 @@ CONFIG_DEFAULTS = {
                 },
             },
             "notify": {
+                "payload": {
+                    "title": {
+                        "$default": "{{receiver}}: {{title}}",
+                    },
+                    "body": {
+                        "$default": "{{subtitle}}  \n{{body}}  \n{{source}} - {{time_str}}",
+                        "$code": "{{receiver}}: {{text}}  \n{{source}} - {{time_str}}",
+                    },
+                },
+            },
+            "ipn": {
                 "payload": {
                     "title": {
                         "$default": "{{receiver}}: {{title}}",
@@ -124,6 +156,14 @@ CONFIG_DEFAULTS = {
                     },
                 },
             },
+            "ipn": {
+                "payload": {
+                    "text": {
+                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                        "$code": "🌀 验证码 {{code}}\n{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                },
+            },
         },
         "lark": {
             "logmarker": "📘",
@@ -137,6 +177,12 @@ CONFIG_DEFAULTS = {
                 "code": 0,
             },
             "notify": {
+                "payload": {
+                    "$default": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"blue\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}}",
+                    "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"验证码\\n{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}",
+                },
+            },
+            "ipn": {
                 "payload": {
                     "$default": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"blue\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}}",
                     "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"验证码\\n{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}",
@@ -168,6 +214,20 @@ CONFIG_DEFAULTS = {
                 }
             },
             "notify": {
+                "payload": {
+                    "title": {
+                        "$default": "{{receiver}}: {{title}}",
+                    },
+                    "body": {
+                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
+                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                    "copy": {
+                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                },
+            },
+            "ipn": {
                 "payload": {
                     "title": {
                         "$default": "{{receiver}}: {{title}}",
@@ -217,6 +277,21 @@ CONFIG_DEFAULTS = {
                     },
                 },
             },
+            "ipn": {
+                "payload": {
+                    "title": {
+                        "$default": "{{receiver}}: {{title}}",
+                    },
+                    "body": {
+                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
+                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+                    },
+                    "input": {
+                        "$default": "{{text}}",
+                        "$code": "{{code}}",
+                    },
+                },
+            },
         },
     }
 }
@@ -231,12 +306,15 @@ CONFIG_TEMPLATE = """# msgflow runtime config
 source: msgflow        # default: msgflow
 check_interval: 1     # default: 1 second
 
-# app:                # default: retention.sms=count/5000, retention.notify=days/30
+# app:                # default: retention.sms=count/5000, retention.notify=days/30, retention.ipn=days/30
 #   retention:
 #     sms:
 #       mode: count      # count | days
 #       value: 5000
 #     notify:
+#       mode: days       # count | days
+#       value: 30
+#     ipn:
 #       mode: days       # count | days
 #       value: 30
 
@@ -328,6 +406,18 @@ check_interval: 1     # default: 1 second
 #         - target: app_notification
 #         - target: lark_debug_bot
 
+# ipn:
+#   strategy: until_success   # default: until_success; options: all | until_success
+#   rules:                 # default: []
+#     - name_mark: important
+#       filters:
+#         - type: selector
+#           match:
+#             text: true
+#       destinations:
+#         - target: app_notification
+#         - target: lark_debug_bot
+#
 # alarm:
 #   strategy: until_success   # default: until_success; options: all | until_success
 #   destinations:          # default: []

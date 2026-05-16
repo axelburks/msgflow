@@ -23,7 +23,7 @@ def _load_code_fixture_cases(kind):
     items = json.loads(path.read_text(encoding="utf-8"))
     cases = []
     for index, item in enumerate(items):
-        if kind == "notify":
+        if kind in ("notify", "ipn"):
             text = _notify_text_from_item(item)
         else:
             text = item.get("text") or ""
@@ -75,7 +75,7 @@ def test_get_code_from_text(text, expected):
 
 @pytest.mark.parametrize(
     "text, expected",
-    _load_code_fixture_cases("sms") + _load_code_fixture_cases("notify"),
+    _load_code_fixture_cases("sms") + _load_code_fixture_cases("notify") + _load_code_fixture_cases("ipn"),
 )
 def test_get_code_from_text_matches_fixture_expected_codes(text, expected):
     assert utils.get_code_from_text(text) == expected

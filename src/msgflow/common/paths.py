@@ -16,6 +16,7 @@ BREW_SERVICE_LOG_FILE_NAME = f"{APP_NAME}-service.log"
 MANAGED_CORE_EXECUTABLE_NAME = "msgflow-core"
 SMS_DB_PATH = "~/Library/Messages/chat.db"
 NOTIFY_DB_PATH = "~/Library/Group Containers/group.com.apple.usernoted/db2/db"
+IPN_REMOTE_PATH = "~/Library/Group Containers/group.com.apple.UserNotifications/Library/UserNotifications/Remote/default"
 
 
 def common_dir() -> Path:
@@ -94,6 +95,10 @@ def sms_db_path() -> Path:
 
 def notify_db_path() -> Path:
     return Path(os.path.expanduser(NOTIFY_DB_PATH))
+
+
+def ipn_remote_path() -> Path:
+    return Path(os.path.expanduser(IPN_REMOTE_PATH))
 
 
 def is_frozen() -> bool:

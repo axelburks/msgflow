@@ -95,6 +95,7 @@ class BuiltDestinationBase(_BaseCfgModel):
     payload: Dict[str, Any]
     sms: Optional[Dict[str, Any]] = None
     notify: Optional[Dict[str, Any]] = None
+    ipn: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def _validate_tpl_vars(self) -> "BuiltDestinationBase":
@@ -124,6 +125,7 @@ class LocalDestinationModel(BuiltDestinationBase, Generic[PayloadT]):
     payload: PayloadT
     sms: Optional[LocalKindOverrideModel[PayloadT]] = None
     notify: Optional[LocalKindOverrideModel[PayloadT]] = None
+    ipn: Optional[LocalKindOverrideModel[PayloadT]] = None
 
 
 class NotificationDestinationModel(LocalDestinationModel[NotificationPayloadModel]):
@@ -150,6 +152,7 @@ class ReqDestinationModel(BuiltDestinationBase):
     success_json: Optional[Dict[str, Any]] = None
     sms: Optional[Dict[str, Any]] = None
     notify: Optional[Dict[str, Any]] = None
+    ipn: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def _validate_request_preparable(self) -> "ReqDestinationModel":
@@ -242,6 +245,12 @@ class NotifyModel(_BaseCfgModel, Generic[DestT]):
     rules: List[RuleModel[DestT]] = Field(default_factory=list)
 
 
+class IPNModel(_BaseCfgModel, Generic[DestT]):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    strategy: Strategy
+    rules: List[RuleModel[DestT]] = Field(default_factory=list)
+
+
 class AlarmModel(_BaseCfgModel, Generic[DestT]):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     strategy: Strategy
@@ -258,6 +267,7 @@ class AppRetentionModel(_BaseCfgModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     sms: AppRetentionKindModel
     notify: AppRetentionKindModel
+    ipn: AppRetentionKindModel
 
 
 class AppModel(_BaseCfgModel):
@@ -275,6 +285,7 @@ class CfgModel(_BaseCfgModel, Generic[DestT]):
     target: Dict[str, TargetModel]
     sms: SMSModel[DestT]
     notify: NotifyModel[DestT]
+    ipn: IPNModel[DestT]
     alarm: AlarmModel[DestT]
     app: AppModel
 
@@ -322,10 +333,13 @@ class Config:
         }
         sms_rules = self._build_sms_rules()
         notify_rules = self._build_notify_rules()
+        ipn_rules = self._build_ipn_rules()
         if sms_rules:
             built_overlay["sms"] = {"rules": sms_rules}
         if notify_rules:
             built_overlay["notify"] = {"rules": notify_rules}
+        if ipn_rules:
+            built_overlay["ipn"] = {"rules": ipn_rules}
         self.built_cfg: Dict[str, Any] = deep_merge_dicts(self.effective_cfg, built_overlay)
         self._validate_built_cfg()
 
@@ -411,8 +425,14 @@ class Config:
             return None
         return self._build_rules_by_key('notify')
 
+    def _build_ipn_rules(self) -> Optional[List[Dict[str, Any]]]:
+        ipn_cfg = self.effective_cfg.get('ipn')
+        if not ipn_cfg.get('rules'):
+            return None
+        return self._build_rules_by_key('ipn')
+
     def _build_rules_by_key(self, key: str) -> List[Dict[str, Any]]:
-        # Build a list of fully-resolved rules for a given flow kind (sms/notify).
+        # Build a list of fully-resolved rules for a given flow kind.
         opt = self.effective_cfg.get(key)
         default_strategy = opt.get('strategy')
         rules = opt.get('rules') or []

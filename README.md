@@ -6,7 +6,7 @@ MsgFlow is a macOS message forwarding app. It listens for SMS and notification m
 
 ## Highlights
 
-- **Multiple sources**: reads SMS/iMessage from `~/Library/Messages/chat.db` and macOS notification records from `~/Library/Group Containers/group.com.apple.usernoted/db2/db`.
+- **Multiple sources**: reads SMS/iMessage from `~/Library/Messages/chat.db`, macOS notification records from `~/Library/Group Containers/group.com.apple.usernoted/db2/db`, and iPhone mirrored notifications from `~/Library/Group Containers/group.com.apple.UserNotifications/Library/UserNotifications/Remote/default`.
 - **Code detection**: detects verification codes in Simplified Chinese, Traditional Chinese, and English messages, with dedicated templates for code messages.
 - **Rule-based forwarding**: routes messages to different destinations with `and`, `or`, and `selector` filters using regex and message fields.
 - **Multiple channels**: supports `bark`, `tgbot`, `pushgo`, `lark`, `webhook`, `notification`, and `floating`.
@@ -20,7 +20,8 @@ MsgFlow is a macOS message forwarding app. It listens for SMS and notification m
 - The listener process needs Full Disk Access, otherwise it cannot read SMS and notification records.
 - Accessibility permission is required for floating panels and Type/Paste actions.
 - To forward iPhone SMS, the messages must appear in Messages on the Mac, for example through iCloud Messages or Text Message Forwarding.
-- To forward notifications, the target notifications must already appear in macOS Notification Center.
+- To forward macOS notifications, the target notifications must already appear in macOS Notification Center.
+- To forward iPhone notifications, iPhone Mirroring notification forwarding must be enabled in macOS and iOS settings.
 
 ## Installation
 
@@ -117,6 +118,7 @@ The main blocks are:
 - `target`: named forwarding targets, each specifying a channel.
 - `sms.rules`: SMS/iMessage forwarding rules.
 - `notify.rules`: macOS notification record forwarding rules.
+- `ipn.rules`: iPhone mirrored notification forwarding rules.
 - `alarm.destinations`: alert destinations used when delivery fails or a source is silent for too long.
 - `channel`: optional shared defaults for channels.
 - `app`: optional app history retention settings.
@@ -124,7 +126,7 @@ The main blocks are:
 Each destination's final config is merged from three layers, where later layers override earlier ones:
 
 ```text
-channel.<channel> < target.<name> < rule.destinations[]
+channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
 ```
 
 See [Configuration](./docs/configuration.md) for the full config structure, template variables, filters, command-line options, and complete examples.
@@ -166,7 +168,7 @@ alarm:
 
 - Permission setup: Accessibility and Full Disk Access.
 - Menu bar actions: Start/Pause, Reload Config, Open Config Folder, Launch at Login, Debug Mode.
-- History window: view processing records for SMS and notifications.
+- History window: view processing records for SMS, macOS notifications, and iPhone notifications.
 - Query DSL: search by fields such as `sender`, `text`, `kind`, `status`, `trigger`, `rule`, and `dest`.
 - Config and cursors: view the effective config and edit target cursors per message kind.
 - Replay actions: Rematch & Send, Resend Destination, Delete.
@@ -174,8 +176,8 @@ alarm:
 
 ## Important Notes
 
-- MsgFlow only reads local macOS databases; it does not modify Messages or Notification Center databases.
-- On first launch, MsgFlow starts listening from the current tail of each database and does not automatically replay historical messages.
+- MsgFlow only reads local macOS stores; it does not modify Messages, Notification Center, or iPhone notification files.
+- On first launch, MsgFlow starts listening from the current tail of each source and does not automatically replay historical messages.
 - Remote channel cursors are persisted; local channels (`notification`, `floating`) do not persist cursors.
 - Unsigned or non-notarized builds may trigger Gatekeeper warnings.
 
@@ -195,7 +197,7 @@ alarm:
 - [x] App support for multi-filtering records, rematching, resending a single destination, deleting records, viewing config, and editing cursors
 - [x] Use unix sockets for rpc communication
 - [x] App support for multilingual UI
-- [ ] Support listening to notifications from iPhone
+- [x] Support listening to notifications from iPhone
 - [ ] App support for signing and building the app
 
 ## Documentation

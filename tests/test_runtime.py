@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from msgflow.service import runtime
-from msgflow.service.runtime import CoreRuntime, _notify_enabled, _sms_enabled, _source_display_name
+from msgflow.service.runtime import CoreRuntime, _ipn_enabled, _notify_enabled, _sms_enabled, _source_display_name
 
 
 class FakeHistory:
@@ -53,16 +53,18 @@ def test_enabled_flags_reflect_configured_rules(monkeypatch):
     monkeypatch.setattr(
         runtime.config,
         "cfg",
-        SimpleNamespace(built_cfg={"sms": {"rules": [1]}, "notify": {"rules": []}}),
+        SimpleNamespace(built_cfg={"sms": {"rules": [1]}, "notify": {"rules": []}, "ipn": {"rules": [1]}}),
     )
 
     assert _sms_enabled() is True
     assert _notify_enabled() is False
+    assert _ipn_enabled() is True
 
 
 def test_source_display_name_has_known_labels_and_fallback():
     assert _source_display_name("sms") == "SMS"
     assert _source_display_name("notify") == "Notify"
+    assert _source_display_name("ipn") == "IPN"
     assert _source_display_name("other") == "other"
 
 
@@ -170,6 +172,7 @@ def test_maybe_cleanup_history_applies_count_and_days_retention(monkeypatch):
                 "retention": {
                     "sms": {"mode": "count", "value": 1000},
                     "notify": {"mode": "days", "value": 7},
+                    "ipn": {"mode": "days", "value": 30},
                 }
             }
         }
@@ -179,7 +182,7 @@ def test_maybe_cleanup_history_applies_count_and_days_retention(monkeypatch):
 
     deleted = obj.maybe_cleanup_history()
 
-    assert deleted == 5
+    assert deleted == 8
     assert obj.history.cleanup_by_count_calls == [("sms", 1000, 500)]
-    assert obj.history.cleanup_by_days_calls == [("notify", 7)]
+    assert obj.history.cleanup_by_days_calls == [("notify", 7), ("ipn", 30)]
     assert obj.insert_since_last_cleanup == 0

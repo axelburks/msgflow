@@ -6,6 +6,7 @@ from . import config
 from .common.logging_utils import LOG_FILE_ENV, configure_root_logging, install_unhandled_exception_logging
 from .service.flows.sms import SMSFlow
 from .service.flows.notify import NotifyFlow
+from .service.flows.ipn import IPNFlow
 from .rpc.core_rpc import CoreRPCServer
 from .service.runtime import CoreRuntime
 
@@ -20,6 +21,11 @@ def _sms_enabled() -> bool:
 def _notify_enabled() -> bool:
     # Notify flow is active only when at least one Notify rule is configured.
     return bool(config.cfg.built_cfg.get('notify', {}).get('rules'))
+
+
+def _ipn_enabled() -> bool:
+    # iPhone notification flow is active only when at least one IPN rule is configured.
+    return bool(config.cfg.built_cfg.get('ipn', {}).get('rules'))
 
 
 def _fixture_file_from_dir(fixture_dir: str, kind: str) -> str:
@@ -96,6 +102,12 @@ class MsgFlowApp(object):
             if command is not None:
                 self.flows = list(self.runtime.flows)
                 now = time.monotonic()
+            source_checks = self.runtime.pop_pending_source_checks()
+            if self.runtime.status == 'running' and self.runtime.error is None and source_checks:
+                for flow in self.flows:
+                    if flow.KIND in source_checks:
+                        flow.update_hook()
+                now = time.monotonic()
             if self.runtime.status == 'running' and self.runtime.error is None and now >= next_check:
                 if not self.flows:
                     try:
@@ -153,17 +165,17 @@ def main() -> None:
     parser.add_argument('-n', '--num', type=int, default=2, help='number of messages to simulate')
     parser.add_argument(
         '--fixture-file',
-        help='optional JSON fixture file for mock mode; requires --kind sms or --kind notify',
+        help='optional JSON fixture file for mock mode; requires --kind sms, notify or ipn',
     )
     parser.add_argument(
         '--fixture-dir',
-        help='fixture directory for mock mode; with --kind all it must contain sms/sms.json and notify/notify.json',
+        help='fixture directory for mock mode; with --kind all it must contain sms/sms.json, notify/notify.json and ipn/ipn.json when enabled',
     )
     parser.add_argument(
         '-k', '--kind',
-        choices=['sms', 'notify', 'all'],
+        choices=['sms', 'notify', 'ipn', 'all'],
         default='all',
-        help='target kind for check/mock: sms | notify | all (default: all)',
+        help='target kind for check/mock: sms | notify | ipn | all (default: all)',
     )
     args = parser.parse_args()
 
@@ -193,6 +205,8 @@ def main() -> None:
             SMSFlow().check_destinations()
         if args.kind in ('notify', 'all') and _notify_enabled():
             NotifyFlow().check_destinations()
+        if args.kind in ('ipn', 'all') and _ipn_enabled():
+            IPNFlow(start_watcher=False).check_destinations()
         sys.exit(0)
 
     if args.mock:
@@ -201,8 +215,9 @@ def main() -> None:
             if not args.fixture_dir:
                 logger.error('--kind all with -m requires --fixture-dir')
                 sys.exit(1)
-            sms_fixture_file = _fixture_file_from_dir(args.fixture_dir, 'sms')
-            notify_fixture_file = _fixture_file_from_dir(args.fixture_dir, 'notify')
+            sms_fixture_file = _fixture_file_from_dir(args.fixture_dir, 'sms') if _sms_enabled() else None
+            notify_fixture_file = _fixture_file_from_dir(args.fixture_dir, 'notify') if _notify_enabled() else None
+            ipn_fixture_file = _fixture_file_from_dir(args.fixture_dir, 'ipn') if _ipn_enabled() else None
         else:
             if args.fixture_file and args.fixture_dir:
                 logger.error('use only one of --fixture-file or --fixture-dir')
@@ -218,6 +233,8 @@ def main() -> None:
             SMSFlow().mock_to_forward(args.num, fixture_file=sms_fixture_file if args.kind == 'all' else selected_fixture_file)
         if args.kind in ('notify', 'all') and _notify_enabled():
             NotifyFlow().mock_to_forward(args.num, fixture_file=notify_fixture_file if args.kind == 'all' else selected_fixture_file)
+        if args.kind in ('ipn', 'all') and _ipn_enabled():
+            IPNFlow(start_watcher=False).mock_to_forward(args.num, fixture_file=ipn_fixture_file if args.kind == 'all' else selected_fixture_file)
         sys.exit(0)
 
     rpc_server = CoreRPCServer(runtime)

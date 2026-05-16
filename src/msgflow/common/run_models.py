@@ -5,6 +5,7 @@ from enum import Enum
 class MessageKind(str, Enum):
     SMS = "sms"
     NOTIFY = "notify"
+    IPN = "ipn"
 
 
 class RunTriggerType(str, Enum):

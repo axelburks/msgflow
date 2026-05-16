@@ -28,6 +28,7 @@ The app stores history and logs under the same config root.
 | `target` | Yes | - | Named forwarding targets referenced by rules. |
 | `sms` | No | Built in | SMS/iMessage forwarding rules. |
 | `notify` | No | Built in | macOS notification forwarding rules. |
+| `ipn` | No | Built in | iPhone mirrored notification forwarding rules. |
 | `alarm` | No | Built in | Destinations for failure and silence alerts. |
 | `app` | No | Built in | App history retention settings. |
 
@@ -132,7 +133,7 @@ The final destination config is merged in this order:
 channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
 ```
 
-The `<kind>` overlay is `sms` or `notify` and lets a channel use different defaults for different source types.
+The `<kind>` overlay is `sms`, `notify`, or `ipn` and lets a channel use different defaults for different source types.
 
 ## SMS Rules
 
@@ -201,6 +202,39 @@ Notification fields include all common template fields plus:
 | `text` | Joined `title`, `subtitle`, and `body`; also used for code detection. |
 | `rec_id` | Notification record id. |
 | `delivered_date` | Raw macOS delivery timestamp used as cursor. |
+
+## iPhone Notification Rules
+
+`ipn.rules` handles iPhone notifications mirrored to macOS by iPhone Mirroring. It is enabled when at least one ipn rule is configured.
+
+```yaml
+ipn:
+  strategy: until_success
+  rules:
+    - name_mark: iphone_codes
+      filters:
+        - type: selector
+          match:
+            text: true
+      destinations:
+        - target: local_notify
+        - target: bark_phone
+```
+
+iPhone notification fields include all common template fields plus:
+
+| Field | Description |
+| --- | --- |
+| `sender` | iPhone app bundle id, such as `com.example.ios`. |
+| `receiver` | Same as `sender` for now; reserved for a future display name when resolvable. |
+| `title` | Notification title. |
+| `subtitle` | Notification subtitle or footer when available. |
+| `body` | Notification body. |
+| `text` | Joined `title`, `subtitle`, and `body`; also used for code detection. |
+| `app_uuid` | UUID directory name under the remote notification store. |
+| `notification_id` | iPhone notification identifier. |
+| `ipn_cursor` | Unix microsecond cursor derived from `AppNotificationCreationDate`. |
+| `created_at` | Raw Unix timestamp from `AppNotificationCreationDate`. |
 
 ## Filters
 
@@ -320,6 +354,9 @@ app:
     notify:
       mode: days
       value: 30
+    ipn:
+      mode: days
+      value: 30
 ```
 
 `mode` can be `count` or `days`.
@@ -327,7 +364,7 @@ app:
 ## Command-Line Options
 
 ```bash
-msgflow [-d] [-c] [-m [-n N]] [-k sms|notify|all]
+msgflow [-d] [-c] [-m [-n N]] [-k sms|notify|ipn|all]
 ```
 
 | Option | Description |
@@ -335,10 +372,10 @@ msgflow [-d] [-c] [-m [-n N]] [-k sms|notify|all]
 | `-d`, `--debug` | Use debug config, DEBUG logs, and full tracebacks. |
 | `-c`, `--check` | Send a test message to configured destinations. |
 | `-m`, `--mock` | Replay fixture messages through the forwarding pipeline. |
-| `--fixture-file` | JSON fixture file for one kind; use with `--kind sms` or `--kind notify`. |
-| `--fixture-dir` | Fixture directory; with `--kind all`, it should contain `sms/sms.json` and `notify/notify.json`. |
+| `--fixture-file` | JSON fixture file for one kind; use with `--kind sms`, `--kind notify`, or `--kind ipn`. |
+| `--fixture-dir` | Fixture directory; with `--kind all`, it should contain fixtures for enabled kinds. |
 | `-n`, `--num` | Number of mock messages to replay. Default is `2`. |
-| `-k`, `--kind` | Target kind for check/mock: `sms`, `notify`, or `all`. Default is `all`. |
+| `-k`, `--kind` | Target kind for check/mock: `sms`, `notify`, `ipn`, or `all`. Default is `all`. |
 
 Examples:
 
@@ -425,6 +462,18 @@ notify:
         - target: local_notify
         - target: bark_phone
 
+ipn:
+  strategy: until_success
+  rules:
+    - name_mark: iphone_notifications
+      filters:
+        - type: selector
+          match:
+            text: true
+      destinations:
+        - target: local_notify
+        - target: bark_phone
+
 alarm:
   strategy: until_success
   destinations:
@@ -438,6 +487,7 @@ alarm:
 
 - `sms` uses `message.ROWID` as the cursor so delayed iPhone sync does not skip older timestamps that arrive later.
 - `notify` uses `record.delivered_date` because notification record ids can be reused after rows are deleted.
+- `ipn` uses a Unix microsecond cursor derived from `AppNotificationCreationDate` and is triggered by file changes with a periodic fallback scan.
 - New destinations start from the current database tail and do not replay historical messages automatically.
 - Remote channel cursors are persisted under `~/.config/msgflow/history/history.db`.
 - Local-only channels (`notification`, `floating`) start from the current database tail on restart to avoid duplicate local alerts.

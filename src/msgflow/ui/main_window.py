@@ -292,7 +292,7 @@ class MainWindowController(NSObject):
     LEFT_PANEL_WIDTH = 580.0
     DETAIL_GAP = 20.0
     FILTER_REFRESH_WIDTH = 28.0
-    FILTER_KIND_WIDTH = 220.0
+    FILTER_KIND_WIDTH = 260.0
     FILTER_TRIGGER_WIDTH = 120.0
     FILTER_STATUS_WIDTH = 120.0
     FILTER_CLEAR_WIDTH = 28.0
@@ -455,10 +455,10 @@ class MainWindowController(NSObject):
         self.kind_tabs = FilterSegmentedControl.alloc().initWithFrame_(
             NSMakeRect(filter_layout["kind_x"], filter_y, self.FILTER_KIND_WIDTH, self.CONTROL_HEIGHT)
         )
-        self.kind_tabs.setSegmentCount_(3)
+        self.kind_tabs.setSegmentCount_(len(MESSAGE_KINDS) + 1)
         self.kind_tabs.setLabel_forSegment_(t("filter.all_kind"), 0)
-        self.kind_tabs.setLabel_forSegment_(t("filter.sms"), 1)
-        self.kind_tabs.setLabel_forSegment_(t("filter.notify"), 2)
+        for idx, kind in enumerate(MESSAGE_KINDS, start=1):
+            self.kind_tabs.setLabel_forSegment_(t(f"filter.{kind}"), idx)
         self.kind_tabs.setSelectedSegment_(0)
         self.kind_tabs.setTarget_(self)
         self.kind_tabs.setAction_("kindFilterChanged:")
@@ -1037,7 +1037,7 @@ class MainWindowController(NSObject):
         selected_run = self._selected_run_record()
         detail = {
             "message": self.selected_message_detail.get("message"),
-            "selected_run_detail": selected_run,
+            "run": selected_run,
             "all_runs": self.selected_message_detail.get("runs"),
         }
         self._render_detail_payload(detail)
@@ -1243,7 +1243,7 @@ class MainWindowController(NSObject):
     def _format_cursor_value(self, value: Any) -> str:
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             return ""
-        return format(float(value), ".15g")
+        return str(value)
 
     @objc.python_method
     def _build_detail_html(self, payload: Any) -> str:
@@ -1576,7 +1576,7 @@ class MainWindowController(NSObject):
         receiver = item.get("receiver") or ""
         text_preview = (item.get("text_preview") or "").replace("\n", " ").strip()
         cursor_value = item.get("cursor_value")
-        cursor_text = "" if cursor_value is None else str(cursor_value)
+        cursor_text = self._format_cursor_value(cursor_value)
         line1_left = cell.viewWithTag_(self.TAG_LINE1_LEFT)
         line1_middle = cell.viewWithTag_(self.TAG_LINE1_MIDDLE)
         line1_right = cell.viewWithTag_(self.TAG_LINE1_RIGHT)
