@@ -13,39 +13,39 @@ from msgflow.common.record_query import (
 
 
 def test_tokenize_handles_quotes_operators_and_escaped_literals():
-    assert tokenize(r"text:'hello world' sender:alice\ bob text:a\|b") == [
-        "text",
+    assert tokenize(r"body:'hello world' sender:alice\ bob body:a\|b") == [
+        "body",
         ":",
         "hello world",
         "sender",
         ":",
         "alice bob",
-        "text",
+        "body",
         ":",
         "a|b",
     ]
 
 
 def test_parse_query_supports_default_field_and_term_operators():
-    assert parse_query(r"hello status:=success code:!123 text:~'验证码\d+'") == And(
+    assert parse_query(r"hello status:=success code:!123 body:~'验证码\d+'") == And(
         (
-            Clause("text", "like", "hello"),
+            Clause("body", "like", "hello"),
             Clause("status", "eq", "success"),
             Clause("code", "nlike", "123"),
-            Clause("text", "regex", r"验证码\d+"),
+            Clause("body", "regex", r"验证码\d+"),
         )
     )
 
 
 def test_parse_query_supports_or_not_and_parentheses():
-    assert parse_query("kind:sms -(sender:bot | text:debug)") == And(
+    assert parse_query("kind:sms -(sender:bot | body:debug)") == And(
         (
             Clause("kind", "like", "sms"),
             Not(
                 Or(
                     (
                         Clause("sender", "like", "bot"),
-                        Clause("text", "like", "debug"),
+                        Clause("body", "like", "debug"),
                     )
                 )
             ),
@@ -81,10 +81,11 @@ def test_parse_query_supports_field_scoped_operator_values():
     "query, message",
     [
         pytest.param("unknown:value", "unknown field", id="未知字段"),
-        pytest.param("text:", "empty value", id="空字段值"),
-        pytest.param("text:(failed |)", "missing expression after OR", id="OR 后缺少表达式"),
+        pytest.param("text:value", "unknown field", id="不支持 text 字段"),
+        pytest.param("body:", "empty value", id="空字段值"),
+        pytest.param("body:(failed |)", "missing expression after OR", id="OR 后缺少表达式"),
         pytest.param("kind:sms (status:failed", "missing closing parenthesis", id="括号未闭合"),
-        pytest.param("text:'hello", "unclosed ' quote", id="引号未闭合"),
+        pytest.param("body:'hello", "unclosed ' quote", id="引号未闭合"),
     ],
 )
 def test_parse_query_rejects_invalid_clauses(query, message):
@@ -100,7 +101,7 @@ def test_parse_query_rejects_leading_colon():
 def test_compile_clauses_builds_sql_and_params_for_all_ops():
     sql, params = compile_clauses(
         [
-            Clause("text", "like", "abc"),
+            Clause("body", "like", "abc"),
             Clause("sender", "nlike", "bot"),
             Clause("status", "ne", "failed"),
             Clause("code", "nregex", r"\d+"),
@@ -108,7 +109,7 @@ def test_compile_clauses_builds_sql_and_params_for_all_ops():
     )
 
     assert sql == (
-        "(mr.text LIKE ?) AND ((mr.sender IS NULL OR mr.sender NOT LIKE ?)) AND "
+        "(mr.body LIKE ?) AND ((mr.sender IS NULL OR mr.sender NOT LIKE ?)) AND "
         "((rr.status IS NULL OR rr.status <> ?)) AND ((rr.code IS NULL OR NOT (rr.code REGEXP ?)))"
     )
     assert params == ["%abc%", "%bot%", "failed", r"\d+"]
@@ -125,11 +126,11 @@ def test_build_query_sql_compiles_boolean_expression_with_params():
 
 
 def test_build_query_sql_compiles_group_not_with_inverse_ops():
-    sql, params = build_query_sql("-(sender:bot | text:debug)")
+    sql, params = build_query_sql("-(sender:bot | body:debug)")
 
     assert sql == (
         "((mr.sender IS NULL OR mr.sender NOT LIKE ?)) AND "
-        "((mr.text IS NULL OR mr.text NOT LIKE ?))"
+        "((mr.body IS NULL OR mr.body NOT LIKE ?))"
     )
     assert params == ["%bot%", "%debug%"]
 
@@ -146,4 +147,4 @@ def test_build_query_sql_returns_empty_for_blank_query():
 
 def test_build_query_sql_rejects_invalid_regex():
     with pytest.raises(ValueError, match="invalid regex"):
-        build_query_sql("text:~[")
+        build_query_sql("body:~[")

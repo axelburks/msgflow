@@ -22,6 +22,12 @@ def test_build_tpl_mapping_prefers_message_values_over_kwargs():
     assert mapping["text"] == "from-kwargs"
 
 
+def test_build_tpl_mapping_derives_text_from_non_empty_title_subtitle_body():
+    mapping = build_tpl_mapping({"title": "Title", "subtitle": "", "body": "Body"})
+
+    assert mapping["text"] == "Title\nBody"
+
+
 def test_condition_dict_detection_requires_non_empty_allowed_keys_only():
     assert is_value_condition_dict({"$default": "normal", "$code": "code"})
     assert not is_value_condition_dict({})

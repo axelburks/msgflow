@@ -57,7 +57,6 @@ def test_remote_notification_store_decodes_messages(tmp_path):
             "title": "Title",
             "subtitle": "",
             "body": "Body",
-            "text": "Title\nBody",
         }
     ]
 

@@ -7,7 +7,7 @@ import pytest
 from msgflow.service.history import HistoryStore, _sqlite_regexp
 
 
-def _insert_sample_run(store: HistoryStore, *, kind="sms", text="验证码 123456", status="success") -> tuple[int, int]:
+def _insert_sample_run(store: HistoryStore, *, kind="sms", body="验证码 123456", status="success") -> tuple[int, int]:
     message_id = store.insert_message(
         kind,
         "rowid",
@@ -17,7 +17,7 @@ def _insert_sample_run(store: HistoryStore, *, kind="sms", text="验证码 12345
             "time_str": "2026-01-01 00:00:00",
             "sender": "alice",
             "receiver": "bob",
-            "text": text,
+            "body": body,
             "code": "123456",
         },
     )
@@ -49,21 +49,43 @@ def test_history_store_inserts_and_loads_message_and_run(tmp_path):
     run = store.get_run(run_id)
 
     assert message is not None
-    assert message["msg"]["text"] == "验证码 123456"
+    assert message["msg"]["body"] == "验证码 123456"
     assert run is not None
     assert run["trace"] == {"rules": [{"name_mark": "code"}]}
+
+
+def test_message_records_schema_does_not_store_text_column(tmp_path):
+    store = HistoryStore(str(tmp_path / "history.db"))
+
+    columns = store._connect().execute("PRAGMA table_info(message_records)").fetchall()
+
+    assert "text" not in {row["name"] for row in columns}
+    assert [row["name"] for row in columns] == [
+        "id",
+        "kind",
+        "sender",
+        "receiver",
+        "title",
+        "subtitle",
+        "body",
+        "time_str",
+        "timestamp",
+        "cursor_value",
+        "msg",
+        "created_at",
+    ]
 
 
 def test_history_json_is_compact_for_regex_matching(tmp_path):
     db_path = tmp_path / "history.db"
     store = HistoryStore(str(db_path))
-    message_id = store.insert_message("sms", "rowid", {"rowid": 1, "text": "hello", "nested": {"a": 1}})
+    message_id = store.insert_message("sms", "rowid", {"rowid": 1, "body": "hello", "nested": {"a": 1}})
 
     conn = sqlite3.connect(db_path)
     raw = conn.execute("SELECT msg FROM message_records WHERE id = ?", (message_id,)).fetchone()[0]
     conn.close()
 
-    assert raw == '{"rowid":1,"text":"hello","nested":{"a":1}}'
+    assert raw == '{"rowid":1,"body":"hello","nested":{"a":1}}'
 
 
 def test_cursor_map_upserts_and_filters_by_kind(tmp_path):
@@ -83,10 +105,10 @@ def test_cursor_map_upserts_and_filters_by_kind(tmp_path):
 def test_list_runs_applies_structured_filters_and_query(tmp_path, monkeypatch):
     store = HistoryStore(str(tmp_path / "history.db"))
     monkeypatch.setattr("msgflow.service.history.format_ts", lambda ts: f"ts:{ts}")
-    _insert_sample_run(store, kind="sms", text="验证码 123456", status="success")
-    _insert_sample_run(store, kind="notify", text="普通通知", status="failed")
+    _insert_sample_run(store, kind="sms", body="验证码 123456", status="success")
+    _insert_sample_run(store, kind="notify", body="普通通知", status="failed")
 
-    result = store.list_runs(limit=20, offset=0, kind="sms", status="success", query="text:~验证码")
+    result = store.list_runs(limit=20, offset=0, kind="sms", status="success", query="body:~验证码")
 
     assert result["total"] == 1
     assert result["items"][0]["kind"] == "sms"
@@ -97,14 +119,14 @@ def test_list_runs_applies_structured_filters_and_query(tmp_path, monkeypatch):
 def test_list_runs_applies_boolean_dsl_query(tmp_path, monkeypatch):
     store = HistoryStore(str(tmp_path / "history.db"))
     monkeypatch.setattr("msgflow.service.history.format_ts", lambda ts: f"ts:{ts}")
-    _insert_sample_run(store, kind="sms", text="验证码 123456", status="success")
-    _insert_sample_run(store, kind="sms", text="debug 000000", status="failed")
-    _insert_sample_run(store, kind="notify", text="普通通知", status="failed")
+    _insert_sample_run(store, kind="sms", body="验证码 123456", status="success")
+    _insert_sample_run(store, kind="sms", body="debug 000000", status="failed")
+    _insert_sample_run(store, kind="notify", body="普通通知", status="failed")
 
     result = store.list_runs(
         limit=20,
         offset=0,
-        query=r"kind:sms status:(success | failed) -text:debug code:~'\d+'",
+        query=r"kind:sms status:(success | failed) -body:debug code:~'\d+'",
     )
 
     assert result["total"] == 1
@@ -134,9 +156,9 @@ def test_delete_run_returns_whether_row_existed(tmp_path):
 def test_cleanup_by_count_keeps_newest_rows_per_kind(tmp_path):
     store = HistoryStore(str(tmp_path / "history.db"))
     for idx in range(5):
-        store.insert_message("sms", "rowid", {"rowid": idx, "text": f"msg {idx}"})
+        store.insert_message("sms", "rowid", {"rowid": idx, "body": f"msg {idx}"})
         time.sleep(0.001)
-    store.insert_message("notify", "rec_id", {"rec_id": 1, "text": "keep-other-kind"})
+    store.insert_message("notify", "rec_id", {"rec_id": 1, "body": "keep-other-kind"})
 
     deleted = store.cleanup_by_count("sms", keep_count=3, low_water_count=2)
 
@@ -150,16 +172,16 @@ def test_cleanup_by_days_deletes_only_old_rows_for_kind(tmp_path, monkeypatch):
     store = HistoryStore(str(tmp_path / "history.db"))
     now = 2_000_000.0
     monkeypatch.setattr(time, "time", lambda: now - 10 * 24 * 60 * 60)
-    store.insert_message("sms", "rowid", {"rowid": 1, "text": "old"})
+    store.insert_message("sms", "rowid", {"rowid": 1, "body": "old"})
     monkeypatch.setattr(time, "time", lambda: now)
-    store.insert_message("sms", "rowid", {"rowid": 2, "text": "new"})
-    store.insert_message("notify", "rec_id", {"rec_id": 1, "text": "old-other-kind"})
+    store.insert_message("sms", "rowid", {"rowid": 2, "body": "new"})
+    store.insert_message("notify", "rec_id", {"rec_id": 1, "body": "old-other-kind"})
 
     deleted = store.cleanup_by_days("sms", keep_days=3)
 
     rows = store._connect().execute("SELECT kind, msg FROM message_records ORDER BY id").fetchall()
     assert deleted == 1
-    assert [(row["kind"], json.loads(row["msg"]).get("text")) for row in rows] == [
+    assert [(row["kind"], json.loads(row["msg"]).get("body")) for row in rows] == [
         ("sms", "new"),
         ("notify", "old-other-kind"),
     ]

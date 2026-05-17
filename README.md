@@ -169,7 +169,7 @@ alarm:
 - Permission setup: Accessibility and Full Disk Access.
 - Menu bar actions: Start/Pause, Reload Config, Open Config Folder, Launch at Login, Debug Mode.
 - History window: view processing records for SMS, macOS notifications, and iPhone notifications.
-- Query DSL: search by fields such as `sender`, `text`, `kind`, `status`, `trigger`, `rule`, and `dest`.
+- Query DSL: search by fields such as `sender`, `receiver`, `title`, `subtitle`, `body`, `kind`, `status`, `trigger`, and `code`.
 - Config and cursors: view the effective config and edit target cursors per message kind.
 - Replay actions: Rematch & Send, Resend Destination, Delete.
 - Local presentation: native macOS notifications and verification-code floating panels with Type/Paste actions.

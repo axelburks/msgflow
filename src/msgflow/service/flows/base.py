@@ -4,7 +4,7 @@ import regex
 
 from ...common.run_models import RunStatus, RunTriggerType
 from ...common.templating import render_destination
-from ...common.utils import format_ts, get_code_from_text
+from ...common.utils import build_message_text, format_ts, get_code_from_text
 from ..channels import Channels, CHANNEL_NOTIFIERS, LOCAL_CHANNELS
 
 logger = logging.getLogger(__name__)
@@ -205,9 +205,11 @@ class MsgFlow(Channels):
         return all_matched, results
 
     def _build_template_context(self, raw_msg: dict[str, Any]) -> dict[str, Any]:
+        text = build_message_text(raw_msg)
         return {
             "source": self.source,
-            "code": get_code_from_text(raw_msg.get("text")),
+            "text": text,
+            "code": get_code_from_text(text),
         }
 
     def _build_run_status(

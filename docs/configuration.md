@@ -164,7 +164,10 @@ SMS fields available to filters and templates:
 | --- | --- |
 | `sender` | Sender phone number or handle. |
 | `receiver` | Receiver/caller id from Messages. |
-| `text` | Message text. |
+| `title` | Message subject when present. |
+| `subtitle` | Always empty for SMS/iMessage. |
+| `body` | Message body. |
+| `text` | Runtime-only joined `title`, `subtitle`, and `body`, available to filters/templates and used for code detection. |
 | `code` | Detected verification code, if any. |
 | `timestamp` | Unix timestamp. |
 | `time_str` | Formatted local time string. |
@@ -199,7 +202,7 @@ Notification fields include all common template fields plus:
 | `title` | Notification title. |
 | `subtitle` | Notification subtitle. |
 | `body` | Notification body. |
-| `text` | Joined `title`, `subtitle`, and `body`; also used for code detection. |
+| `text` | Runtime-only joined `title`, `subtitle`, and `body`; also used for code detection. |
 | `rec_id` | Notification record id. |
 | `delivered_date` | Raw macOS delivery timestamp used as cursor. |
 
@@ -230,7 +233,7 @@ iPhone notification fields include all common template fields plus:
 | `title` | Notification title. |
 | `subtitle` | Notification subtitle or footer when available. |
 | `body` | Notification body. |
-| `text` | Joined `title`, `subtitle`, and `body`; also used for code detection. |
+| `text` | Runtime-only joined `title`, `subtitle`, and `body`; also used for code detection. |
 | `app_uuid` | UUID directory name under the remote notification store. |
 | `notification_id` | iPhone notification identifier. |
 | `ipn_cursor` | Unix microsecond cursor derived from `AppNotificationCreationDate`. |
@@ -290,11 +293,11 @@ Available variables:
 | Variable | Description |
 | --- | --- |
 | `{{sender}}`, `{{receiver}}` | Source-specific sender and receiver fields. |
-| `{{text}}`, `{{code}}` | Message text and detected verification code. |
+| `{{text}}`, `{{code}}` | Runtime-only joined `title`/`subtitle`/`body` text and detected verification code. |
 | `{{timestamp}}`, `{{time_str}}` | Time fields. |
 | `{{source}}` | Configured source label. |
 | `{{msg}}` | Current message as compact JSON. |
-| `{{title}}`, `{{subtitle}}`, `{{body}}` | Notification fields. |
+| `{{title}}`, `{{subtitle}}`, `{{body}}` | Source title, subtitle, and body fields. |
 | `{{error}}`, `{{traceback}}` | Alarm-only fields. |
 
 ## Conditional Values
@@ -491,3 +494,4 @@ alarm:
 - New destinations start from the current database tail and do not replay historical messages automatically.
 - Remote channel cursors are persisted under `~/.config/msgflow/history/history.db`.
 - Local-only channels (`notification`, `floating`) start from the current database tail on restart to avoid duplicate local alerts.
+- History Query DSL searches stored fields such as `title`, `subtitle`, and `body`; runtime-only `text` is not stored and is not a history query field.

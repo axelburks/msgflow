@@ -59,7 +59,8 @@ class SMSFlow(MsgFlow):
             ifnull(handle.uncanonicalized_id, chat.chat_identifier) AS sender,
             message.service,
             message.date,
-            message.text,
+            message.subject AS title,
+            message.text AS body,
             message.attributedBody,
             message.destination_caller_id AS receiver
         from
@@ -83,14 +84,14 @@ class SMSFlow(MsgFlow):
         #   a missing value to 0 rather than crashing the whole poll tick
         # - attach `time_str` for templates/logs
         # - drop rows with no textual content, falling back to decoding
-        #   attributedBody (typedstream blob) when the plain `text` column is empty
+        #   attributedBody (typedstream blob) when the plain `body` column is empty
         for row in data[:]:
             raw_date = row.get('date') or 0
             row['timestamp'] = float(raw_date) / self._NS_PER_SEC + MAC_EPOCH_OFFSET
             row['time_str'] = format_ts(row['timestamp'])
-            if not row.get('text'):
+            if not row.get('body'):
                 if row.get('attributedBody'):
-                    row['text'] = _extract_from_applearchive(row.get('attributedBody'))
+                    row['body'] = _extract_from_applearchive(row.get('attributedBody'))
                 else:
                     data.remove(row)
             row.pop('attributedBody', None)

@@ -413,7 +413,7 @@ check_interval: 1     # default: 1 second
 #       filters:
 #         - type: selector
 #           match:
-#             text: true
+#             code: true
 #       destinations:
 #         - target: app_notification
 #         - target: lark_debug_bot

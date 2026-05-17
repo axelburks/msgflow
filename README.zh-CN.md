@@ -169,7 +169,7 @@ alarm:
 - 权限引导：辅助功能、完全磁盘访问。
 - 菜单栏操作：Start/Pause、Reload Config、Open Config Folder、Launch at Login、Debug Mode。
 - 历史记录窗口：查看短信、macOS 通知和 iPhone 通知的处理记录。
-- 查询 DSL：按 `sender`、`text`、`kind`、`status`、`trigger`、`rule`、`dest` 等字段搜索。
+- 查询 DSL：按 `sender`、`receiver`、`title`、`subtitle`、`body`、`kind`、`status`、`trigger`、`code` 等字段搜索。
 - 配置与游标：查看最终生效配置，编辑每类消息源的目标游标。
 - 重放操作：Rematch & Send、Resend Destination、Delete。
 - 本地呈现：macOS 原生通知、带 Type/Paste 的验证码浮窗。

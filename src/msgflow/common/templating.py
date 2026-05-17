@@ -2,7 +2,7 @@ import copy
 from typing import Any, Optional
 import regex
 
-from .utils import try_parse_json
+from .utils import build_message_text, try_parse_json
 
 # Template variables are written as {{name}} and matched with this regex.
 TPL_VAR_PATTERN = r"\{\{(\w+)\}\}"
@@ -33,10 +33,11 @@ def build_tpl_mapping(msg: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
     # Build the var -> value mapping used by `render_template`.
     # Pre-declare every well-known key so `ALLOWED_MATCH_TPL_VARS` reflects
     # the full set of supported variables (see module footer).
+    text = build_message_text(msg)
     mapping = {
         "sender": msg.get('sender'),
         "receiver": msg.get('receiver'),
-        "text": msg.get('text'),
+        "text": text or None,
         "timestamp": msg.get('timestamp'),
         "time_str": msg.get('time_str'),
         "msg": msg.get('msg'),

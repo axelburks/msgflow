@@ -7,7 +7,7 @@ import time
 from typing import Any, Optional
 
 from ..common.record_query import build_query_sql
-from ..common.utils import format_ts
+from ..common.utils import build_message_text, format_ts
 
 
 def _sqlite_regexp(pattern: Any, value: Any) -> int:
@@ -51,15 +51,14 @@ class HistoryStore(object):
                 CREATE TABLE IF NOT EXISTS message_records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     kind TEXT NOT NULL,
-                    cursor_value REAL,
-                    timestamp REAL,
-                    time_str TEXT,
                     sender TEXT,
                     receiver TEXT,
-                    text TEXT,
                     title TEXT,
                     subtitle TEXT,
                     body TEXT,
+                    time_str TEXT,
+                    timestamp REAL,
+                    cursor_value REAL,
                     msg TEXT NOT NULL,
                     created_at REAL NOT NULL
                 );
@@ -154,26 +153,28 @@ class HistoryStore(object):
 
     def insert_message(self, kind: str, cursor_field: str, message: dict[str, Any]) -> int:
         now = time.time()
+        title = message.get("title")
+        subtitle = message.get("subtitle")
+        body = message.get("body")
         with self._lock:
             conn = self._connect()
             cursor = conn.execute(
                 """
                 INSERT INTO message_records (
-                    kind, cursor_value, timestamp, time_str, sender, receiver, text,
-                    title, subtitle, body, msg, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    kind, sender, receiver, title, subtitle, body,
+                    time_str, timestamp, cursor_value, msg, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     kind,
-                    message.get(cursor_field),
-                    message.get("timestamp"),
-                    message.get("time_str"),
                     message.get("sender"),
                     message.get("receiver"),
-                    message.get("text"),
-                    message.get("title"),
-                    message.get("subtitle"),
-                    message.get("body"),
+                    title,
+                    subtitle,
+                    body,
+                    message.get("time_str"),
+                    message.get("timestamp"),
+                    message.get(cursor_field),
                     self._json_dumps(message),
                     now,
                 ),
@@ -270,8 +271,9 @@ class HistoryStore(object):
                     mr.kind,
                     mr.sender,
                     mr.receiver,
-                    mr.text,
                     mr.title,
+                    mr.subtitle,
+                    mr.body,
                     mr.time_str,
                     mr.cursor_value,
                     rr.trace
@@ -286,7 +288,7 @@ class HistoryStore(object):
         total = int(total_row["cnt"]) if total_row else 0
         items = []
         for row in rows:
-            text_preview = row["text"] or row["title"] or ""
+            text_preview = build_message_text(dict(row))
             items.append(
                 {
                     "run_id": row["run_id"],

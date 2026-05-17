@@ -24,13 +24,6 @@ def _extract_req_field(req: Any, key: str) -> Optional[str]:
     return val
 
 
-def _build_text(title: Optional[str], subtitle: Optional[str], body: Optional[str]) -> str:
-    # Join whichever of title/subtitle/body are non-empty into a single
-    # newline-separated text, mirroring how the notification appears on screen.
-    parts = [p for p in (title, subtitle, body) if p]
-    return '\n'.join(parts)
-
-
 class NotifyFlow(MsgFlow):
     """Flow implementation that reads macOS Notification Center records
     from the `usernoted` SQLite database."""
@@ -121,7 +114,6 @@ class NotifyFlow(MsgFlow):
                     'title': title,
                     'subtitle': subtitle,
                     'body': body,
-                    'text': _build_text(title, subtitle, body),
                 }
                 results.append(msg)
             except Exception as e:

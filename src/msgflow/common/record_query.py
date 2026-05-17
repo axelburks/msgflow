@@ -14,7 +14,6 @@ FIELD_MAP: dict[str, str] = {
     "time_str":            "mr.time_str",
     "sender":              "mr.sender",
     "receiver":            "mr.receiver",
-    "text":                "mr.text",
     "title":               "mr.title",
     "subtitle":            "mr.subtitle",
     "body":                "mr.body",
@@ -34,7 +33,7 @@ FIELD_MAP: dict[str, str] = {
     "run_created_at":      "rr.created_at",
 }
 
-DEFAULT_FIELD = "text"
+DEFAULT_FIELD = "body"
 TokenType = Literal[
     "WORD",
     "STRING",

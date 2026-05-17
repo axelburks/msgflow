@@ -98,10 +98,6 @@ def _first_text(*values: Any) -> str:
     return ""
 
 
-def _build_text(title: str, subtitle: str, body: str) -> str:
-    return "\n".join(part for part in (title, subtitle, body) if part)
-
-
 def _fallback_notification_id(app_uuid: str, created_at: float, title: str, body: str) -> str:
     digest = hashlib.sha256(f"{app_uuid}\0{created_at:.6f}\0{title}\0{body}".encode("utf-8")).hexdigest()
     return digest[:16]
@@ -198,9 +194,6 @@ class RemoteNotificationStore:
         title = _first_text(item.get("AppNotificationTitle"), item.get("Header"))
         subtitle = _first_text(item.get("Footer"), item.get("AppNotificationSubtitle"))
         body = _first_text(item.get("AppNotificationMessage"), item.get("body"))
-        text = _build_text(title, subtitle, body)
-        if not text:
-            return None
         bundle_id = self._bundle_by_uuid.get(app_uuid, app_uuid)
         notification_id = _first_text(item.get("AppNotificationIdentifier")) or _fallback_notification_id(
             app_uuid,
@@ -221,5 +214,4 @@ class RemoteNotificationStore:
             "title": title,
             "subtitle": subtitle,
             "body": body,
-            "text": text,
         }

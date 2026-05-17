@@ -106,6 +106,11 @@ def try_parse_json(value: Any) -> Any:
         return None
 
 
+def build_message_text(msg: dict[str, Any]) -> str:
+    parts = [msg.get('title'), msg.get('subtitle'), msg.get('body')]
+    return "\n".join(str(part) for part in parts if part)
+
+
 def get_code_from_text(text: Optional[str]) -> Optional[str]:
     # Extract a verification/one-time code from a free-form message text.
     # Strategy:

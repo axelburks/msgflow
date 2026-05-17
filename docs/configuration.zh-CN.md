@@ -164,7 +164,10 @@ sms:
 | --- | --- |
 | `sender` | 发送方号码或 handle。 |
 | `receiver` | Messages 中的接收方/主叫 id。 |
-| `text` | 消息文本。 |
+| `title` | 存在时为消息 subject。 |
+| `subtitle` | 短信/iMessage 中始终为空。 |
+| `body` | 消息正文。 |
+| `text` | 仅运行时派生，由 `title`、`subtitle` 和 `body` 拼接而成，可用于过滤器/模板，也用于验证码识别。 |
 | `code` | 识别到的验证码，如果存在。 |
 | `timestamp` | Unix 时间戳。 |
 | `time_str` | 格式化后的本地时间字符串。 |
@@ -199,7 +202,7 @@ notify:
 | `title` | 通知标题。 |
 | `subtitle` | 通知副标题。 |
 | `body` | 通知正文。 |
-| `text` | 由 `title`、`subtitle` 和 `body` 拼接而成，也用于验证码识别。 |
+| `text` | 仅运行时派生，由 `title`、`subtitle` 和 `body` 拼接而成，也用于验证码识别。 |
 | `rec_id` | 通知记录 id。 |
 | `delivered_date` | 原始 macOS 投递时间戳，用作游标。 |
 
@@ -230,7 +233,7 @@ iPhone 通知字段包含所有通用模板字段，并额外包含：
 | `title` | 通知标题。 |
 | `subtitle` | 可用时为通知副标题或 footer。 |
 | `body` | 通知正文。 |
-| `text` | 由 `title`、`subtitle` 和 `body` 拼接而成，也用于验证码识别。 |
+| `text` | 仅运行时派生，由 `title`、`subtitle` 和 `body` 拼接而成，也用于验证码识别。 |
 | `app_uuid` | 远端通知存储中的 UUID 目录名。 |
 | `notification_id` | iPhone 通知标识。 |
 | `ipn_cursor` | 由 `AppNotificationCreationDate` 转换得到的 Unix 微秒游标。 |
@@ -290,11 +293,11 @@ payload:
 | 变量 | 说明 |
 | --- | --- |
 | `{{sender}}`, `{{receiver}}` | 消息源相关的发送方和接收方字段。 |
-| `{{text}}`, `{{code}}` | 消息文本和识别到的验证码。 |
+| `{{text}}`, `{{code}}` | 运行时由 `title`/`subtitle`/`body` 拼接出的文本和识别到的验证码。 |
 | `{{timestamp}}`, `{{time_str}}` | 时间字段。 |
 | `{{source}}` | 配置的来源标签。 |
 | `{{msg}}` | 当前消息的紧凑 JSON。 |
-| `{{title}}`, `{{subtitle}}`, `{{body}}` | 通知字段。 |
+| `{{title}}`, `{{subtitle}}`, `{{body}}` | 消息源的标题、副标题和正文。 |
 | `{{error}}`, `{{traceback}}` | 仅 alarm 使用的字段。 |
 
 ## 条件值
@@ -491,3 +494,4 @@ alarm:
 - 新 destinations 会从当前数据库末尾开始，不会自动回放历史消息。
 - 远端通道游标会持久化到 `~/.config/msgflow/history/history.db`。
 - 仅本地通道（`notification`、`floating`）会在重启时从当前数据库末尾开始，以避免重复本地提醒。
+- 历史查询 DSL 搜索 `title`、`subtitle`、`body` 等已存储字段；仅运行时派生的 `text` 不会入库，也不是历史查询字段。
