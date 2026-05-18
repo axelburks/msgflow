@@ -62,9 +62,9 @@ class NotifyFlow(MsgFlow):
         sql = """
             SELECT
                 record.rec_id,
-                app.identifier AS app_identifier,
+                app.identifier,
                 record.delivered_date,
-                record.data AS data
+                record.data
             FROM record
             JOIN app USING (app_id)
             WHERE record.delivered_date IS NOT NULL
@@ -78,12 +78,12 @@ class NotifyFlow(MsgFlow):
             try:
                 # `record.data` is a binary plist containing the notification request.
                 try:
-                    p = plistlib.loads(bytes(row.get('data')))
+                    plist_data = plistlib.loads(bytes(row.get('data')))
                 except Exception as e:
                     logger.error(f"❌ notify plist decode error: {e}")
                     continue
 
-                req = p.get('req') or {}
+                req = plist_data.get('req') or {}
                 title = _extract_req_field(req, 'titl')
                 subtitle = _extract_req_field(req, 'subt')
                 body = _extract_req_field(req, 'body')
@@ -93,28 +93,34 @@ class NotifyFlow(MsgFlow):
                     continue
 
                 # App identity can live either on the plist ('app' key) or on
-                # the row's `app_identifier` column (case may differ); prefer
-                # the plist value when present.
-                app_identifier = row.get('app_identifier')
-                sender = p.get('app') or app_identifier
-                # Map bundle ID to a human-readable app name when possible.
-                receiver = get_app_name(sender) or sender
+                # the row's `identifier` column; prefer the plist value when present.
+                bundle_id = plist_data.get('app') or row.get('identifier')
+                sender = get_app_name(bundle_id)
 
                 # Mac absolute time -> Unix epoch for templates/logs. `delivered_date`
-                # is also kept on the msg because it is the cursor field.
+                # is also kept at the top level because it is the cursor field.
                 delivered_date = float(row.get('delivered_date'))
                 timestamp = delivered_date + MAC_EPOCH_OFFSET
+
+                row['app'] = plist_data.get('app')
+                row['req'] = {
+                    'titl': title,
+                    'subt': subtitle,
+                    'body': body,
+                }
+                row.pop('data', None)
+
                 msg = {
-                    'rec_id': row.get('rec_id'),
-                    'sender': sender,
-                    'receiver': receiver,
                     'delivered_date': delivered_date,
-                    'timestamp': timestamp,
-                    'time_str': format_ts(timestamp),
+                    'sender': sender,
                     'title': title,
                     'subtitle': subtitle,
                     'body': body,
+                    'time_str': format_ts(timestamp),
+                    'timestamp': timestamp,
+                    'msg': row,
                 }
+                
                 results.append(msg)
             except Exception as e:
                 logger.error(f"❌ notify row parse error: {e}")

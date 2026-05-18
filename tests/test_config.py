@@ -15,7 +15,7 @@ def test_config_creates_default_template_and_valid_built_config(monkeypatch, tmp
     assert (tmp_path / "config.yaml").read_text(encoding="utf-8") == CONFIG_TEMPLATE
     assert cfg.built_cfg["source"] == "msgflow"
     assert cfg.built_cfg["sms"]["rules"] == []
-    assert cfg.built_cfg["alarm"]["destinations"] == []
+    assert cfg.built_cfg["alarm"]["rules"] == []
 
 
 def test_config_builds_kind_specific_destinations_with_unique_names(monkeypatch, tmp_path):
@@ -54,8 +54,14 @@ ipn:
       destinations:
         - target: mac
 alarm:
-  destinations:
-    - target: mac
+  rules:
+    - name_mark: errors
+      filters:
+        - type: selector
+          match:
+            error: true
+      destinations:
+        - target: mac
 """,
         encoding="utf-8",
     )
@@ -65,7 +71,9 @@ alarm:
     assert cfg.built_cfg["sms"]["rules"][0]["destinations"][0]["name_mark"] == "sms_code_local"
     assert cfg.built_cfg["notify"]["rules"][0]["destinations"][0]["name_mark"] == "notify_important_mac"
     assert cfg.built_cfg["ipn"]["rules"][0]["destinations"][0]["name_mark"] == "ipn_mirrored_mac"
-    assert cfg.built_cfg["alarm"]["destinations"][0]["name_mark"] == "mac"
+    assert cfg.built_cfg["alarm"]["rules"][0]["destinations"][0]["name_mark"] == "alarm_errors_mac"
+    for key in ("kinds"):
+        assert key not in cfg.built_cfg["sms"]["rules"][0]["destinations"][0]
 
 
 def test_config_rejects_unknown_template_vars(monkeypatch, tmp_path):
@@ -79,8 +87,10 @@ target:
       title: "{{not_allowed}}"
       body: "body"
 alarm:
-  destinations:
-    - target: mac
+  rules:
+    - name_mark: errors
+      destinations:
+        - target: mac
 """,
         encoding="utf-8",
     )
@@ -135,3 +145,21 @@ def test_resolve_destination_applies_channel_kind_target_and_destination_precede
     assert resolved["payload"]["title"] == "dest"
     assert resolved["payload"]["body"] == "dest-body"
     assert "copy" in resolved["payload"]
+    assert "kinds" not in resolved
+
+
+def test_resolve_destination_applies_kinds_overlay_and_strips_it(monkeypatch, tmp_path):
+    monkeypatch.setenv("MSGFLOW_CONFIG_DIR", str(tmp_path))
+    cfg = Config(debug=False)
+    cfg.effective_cfg = copy.deepcopy(cfg.default_cfg)
+    cfg.effective_cfg["target"] = {
+        "bark": {
+            "channel": "bark",
+            "url": "https://example.test",
+        }
+    }
+
+    resolved = cfg._resolve_destination({"target": "bark"}, kind="alarm")
+
+    assert resolved["payload"]["title"] == "{{source}}: {{error}}"
+    assert "kinds" not in resolved

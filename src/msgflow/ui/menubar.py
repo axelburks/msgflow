@@ -2,7 +2,6 @@ from importlib.metadata import PackageNotFoundError, metadata, version
 
 import objc
 from AppKit import (
-    NSApp,
     NSAlert,
     NSAlertSecondButtonReturn,
     NSControlStateValueOff,
@@ -291,4 +290,4 @@ class MenuBarController(NSObject):
         return ""
 
     def quitAction_(self, _sender) -> None:
-        NSApp.terminate_(None)
+        self.app_controller.quitAction_(None)

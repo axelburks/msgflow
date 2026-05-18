@@ -103,8 +103,10 @@ sms:
         - target: local_notify
 
 alarm:
-  destinations:
-    - target: local_notify
+  rules:
+    - name_mark: alerts
+      destinations:
+        - target: local_notify
 ```
 
 启动 msgflow.app 即可开始监听和转发消息。
@@ -119,14 +121,14 @@ MsgFlow 使用 YAML 配置，默认路径为 `~/.config/msgflow/config.yaml`。D
 - `sms.rules`：短信/iMessage 转发规则。
 - `notify.rules`：macOS 通知记录转发规则。
 - `ipn.rules`：iPhone 镜像通知转发规则。
-- `alarm.destinations`：投递失败或消息源长时间静默时使用的告警目标。
+- `alarm.rules`：投递失败或消息源长时间静默时使用的告警规则。
 - `channel`：可选的通道公共默认配置。
 - `app`：可选的 App 历史记录保留策略。
 
 每个 destination 的最终配置由三层合并得到，后者覆盖前者：
 
 ```text
-channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
+channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
 ```
 
 完整配置结构、模板变量、过滤器、命令行参数和完整示例见 [配置文档](./docs/configuration.zh-CN.md)。
@@ -160,8 +162,10 @@ sms:
         - target: bark_phone
 
 alarm:
-  destinations:
-    - target: bark_phone
+  rules:
+    - name_mark: alerts
+      destinations:
+        - target: bark_phone
 ```
 
 ## App 能力
@@ -189,7 +193,7 @@ alarm:
 - [x] 基于 `and`、`or`、`selector` 的规则化转发
 - [x] `until_success` / `all` 两种投递策略
 - [x] 支持异常告警通知(alarm)
-- [x] 基于 `$default`、`$code`、`$alarm` 的条件模板
+- [x] 基于 `$default`、`$code` 的条件模板
 - [x] Pydantic 严格配置校验
 - [x] 支持监听 macOS 通知消息
 - [x] App 版本，初版支持菜单栏、切换监听状态、运行历史窗口等基础功能
@@ -198,6 +202,7 @@ alarm:
 - [x] rpc 更换为 unix socket
 - [x] App 支持多语言界面
 - [x] 支持监听来自 iPhone 的通知
+- [x] 基于规则的告警通知
 - [ ] App 自动签名构建产物
 
 ## 文档

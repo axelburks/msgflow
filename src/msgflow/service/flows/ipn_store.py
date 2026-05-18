@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 CURSOR_SCALE = 1_000_000
 DECODE_RETRY_ATTEMPTS = 3
 DECODE_RETRY_DELAY_SECONDS = 0.2
+KEYED_ARCHIVE_NULL = "$null"
 
 
 def creation_date_to_cursor(value: float) -> int:
@@ -53,6 +54,8 @@ def _decode_keyed_archive(path: Path) -> Any:
         return value
 
     def decode_object(idx: int, obj: Any) -> Any:
+        if obj == KEYED_ARCHIVE_NULL:
+            return None
         name = class_name(obj)
         if name in ("NSDictionary", "NSMutableDictionary") and isinstance(obj, dict):
             out: dict[Any, Any] = {}
@@ -93,7 +96,7 @@ def _first_text(*values: Any) -> str:
         if value is None:
             continue
         text = str(value).strip()
-        if text:
+        if text and text != KEYED_ARCHIVE_NULL:
             return text
     return ""
 
@@ -101,6 +104,26 @@ def _first_text(*values: Any) -> str:
 def _fallback_notification_id(app_uuid: str, created_at: float, title: str, body: str) -> str:
     digest = hashlib.sha256(f"{app_uuid}\0{created_at:.6f}\0{title}\0{body}".encode("utf-8")).hexdigest()
     return digest[:16]
+
+
+def _event_details(item: dict[str, Any]) -> dict[str, Any]:
+    event_behavior = item.get("EventBehavior")
+    if not isinstance(event_behavior, dict):
+        return {}
+    details = event_behavior.get("eventDetails")
+    return details if isinstance(details, dict) else {}
+
+
+def _decode_raw_value(value: Any) -> Any:
+    if value == KEYED_ARCHIVE_NULL:
+        return None
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        return {key: _decode_raw_value(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_decode_raw_value(item) for item in value]
+    return value
 
 
 class RemoteNotificationStore:
@@ -188,30 +211,43 @@ class RemoteNotificationStore:
         raise last_error
 
     def _message_from_item(self, app_uuid: str, item: dict[str, Any]) -> Optional[dict[str, Any]]:
-        created_at = item.get("AppNotificationCreationDate")
-        if not isinstance(created_at, (int, float)):
+        noti_creat_date = item.get("AppNotificationCreationDate")
+        if not isinstance(noti_creat_date, (int, float)):
             return None
-        title = _first_text(item.get("AppNotificationTitle"), item.get("Header"))
+        event_details = _event_details(item)
+        title = _first_text(item.get("AppNotificationTitle"), item.get("Header"), event_details.get("title"))
         subtitle = _first_text(item.get("Footer"), item.get("AppNotificationSubtitle"))
-        body = _first_text(item.get("AppNotificationMessage"), item.get("body"))
+        body = _first_text(item.get("AppNotificationMessage"), item.get("body"), event_details.get("body"))
         bundle_id = self._bundle_by_uuid.get(app_uuid, app_uuid)
         notification_id = _first_text(item.get("AppNotificationIdentifier")) or _fallback_notification_id(
             app_uuid,
-            float(created_at),
+            float(noti_creat_date),
             title,
             body,
         )
-        timestamp = float(created_at)
+        timestamp = float(noti_creat_date)
+        fields_need = (
+            "AppNotificationCreationDate",
+            "AppNotificationIdentifier",
+            "AppNotificationTitle",
+            "AppNotificationSubtitle",
+            "AppNotificationMessage",
+            "Header",
+            "Footer",
+            "body",
+        )
+        raw_msg = {key: _decode_raw_value(item[key]) for key in fields_need if key in item}
+        raw_msg["event_details"] = _decode_raw_value(event_details)
+        raw_msg["app_uuid"] = app_uuid
+        raw_msg["bundle_id"] = bundle_id
+        raw_msg["notification_id"] = notification_id
         return {
             "ipn_cursor": creation_date_to_cursor(timestamp),
-            "timestamp": timestamp,
-            "time_str": format_ts(timestamp),
-            "created_at": timestamp,
-            "app_uuid": app_uuid,
-            "notification_id": notification_id,
             "sender": bundle_id,
-            "receiver": bundle_id,
             "title": title,
             "subtitle": subtitle,
             "body": body,
+            "time_str": format_ts(timestamp),
+            "timestamp": timestamp,
+            "msg": raw_msg,
         }

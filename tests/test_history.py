@@ -1,8 +1,5 @@
-import json
 import sqlite3
 import time
-
-import pytest
 
 from msgflow.service.history import HistoryStore, _sqlite_regexp
 
@@ -19,6 +16,7 @@ def _insert_sample_run(store: HistoryStore, *, kind="sms", body="验证码 12345
             "receiver": "bob",
             "body": body,
             "code": "123456",
+            "msg": {"rowid": 10, "body": body},
         },
     )
     run_id = store.insert_run(
@@ -79,7 +77,11 @@ def test_message_records_schema_does_not_store_text_column(tmp_path):
 def test_history_json_is_compact_for_regex_matching(tmp_path):
     db_path = tmp_path / "history.db"
     store = HistoryStore(str(db_path))
-    message_id = store.insert_message("sms", "rowid", {"rowid": 1, "body": "hello", "nested": {"a": 1}})
+    message_id = store.insert_message(
+        "sms",
+        "rowid",
+        {"rowid": 1, "body": "hello", "msg": {"rowid": 1, "body": "hello", "nested": {"a": 1}}},
+    )
 
     conn = sqlite3.connect(db_path)
     raw = conn.execute("SELECT msg FROM message_records WHERE id = ?", (message_id,)).fetchone()[0]
@@ -162,9 +164,13 @@ def test_cleanup_by_count_keeps_newest_rows_per_kind(tmp_path):
 
     deleted = store.cleanup_by_count("sms", keep_count=3, low_water_count=2)
 
-    remaining_sms = store._connect().execute("SELECT msg FROM message_records WHERE kind = 'sms' ORDER BY id").fetchall()
+    remaining_sms = (
+        store._connect()
+        .execute("SELECT cursor_value FROM message_records WHERE kind = 'sms' ORDER BY id")
+        .fetchall()
+    )
     assert deleted == 3
-    assert [json.loads(row["msg"])["rowid"] for row in remaining_sms] == [3, 4]
+    assert [row["cursor_value"] for row in remaining_sms] == [3, 4]
     assert store._connect().execute("SELECT COUNT(*) FROM message_records WHERE kind = 'notify'").fetchone()[0] == 1
 
 
@@ -179,9 +185,9 @@ def test_cleanup_by_days_deletes_only_old_rows_for_kind(tmp_path, monkeypatch):
 
     deleted = store.cleanup_by_days("sms", keep_days=3)
 
-    rows = store._connect().execute("SELECT kind, msg FROM message_records ORDER BY id").fetchall()
+    rows = store._connect().execute("SELECT kind, body FROM message_records ORDER BY id").fetchall()
     assert deleted == 1
-    assert [(row["kind"], json.loads(row["msg"]).get("body")) for row in rows] == [
+    assert [(row["kind"], row["body"]) for row in rows] == [
         ("sms", "new"),
         ("notify", "old-other-kind"),
     ]

@@ -36,6 +36,7 @@ from ..common.templating import (
 from ..common.utils import deep_merge_dicts
 from .defaults import CONFIG_DEFAULTS, CONFIG_TEMPLATE
 
+
 # Global singleton populated by `app.main` once CLI args are parsed.
 # Modules that need config access read `config.cfg` lazily to avoid import
 # cycles with msgflow/channels.
@@ -50,8 +51,8 @@ MatchKey: TypeAlias = Literal[ALLOWED_MATCH_TPL_VARS]  # type: ignore
 Channel: TypeAlias = Literal[AVAILABLE_CHANNELS]  # type: ignore
 LocalChannel: TypeAlias = Literal[LOCAL_CHANNELS]  # type: ignore
 ReqChannel: TypeAlias = Literal[REQ_CHANNELS]  # type: ignore
-# A CondValue is either a plain value or a conditional mapping (e.g.
-# {"$default": "...", "$code": "...", "$alarm": "..."}).
+# A CondValue is either a plain value or a conditional mapping
+# (e.g. {"$default": "...", "$code": "..."}).
 CondValue: TypeAlias = Union[str, Dict[CondKey, str], StrictInt, Dict[CondKey, StrictInt]]
 
 
@@ -92,10 +93,7 @@ class BuiltDestinationBase(_BaseCfgModel):
     target: str
     channel: Channel
     logmarker: Optional[str] = '🎯'
-    payload: Dict[str, Any]
-    sms: Optional[Dict[str, Any]] = None
-    notify: Optional[Dict[str, Any]] = None
-    ipn: Optional[Dict[str, Any]] = None
+    payload: Union[Dict[str, Any], str]
 
     @model_validator(mode="after")
     def _validate_tpl_vars(self) -> "BuiltDestinationBase":
@@ -123,9 +121,6 @@ class LocalDestinationModel(BuiltDestinationBase, Generic[PayloadT]):
     """Shared destination shape for app-backed local channels."""
 
     payload: PayloadT
-    sms: Optional[LocalKindOverrideModel[PayloadT]] = None
-    notify: Optional[LocalKindOverrideModel[PayloadT]] = None
-    ipn: Optional[LocalKindOverrideModel[PayloadT]] = None
 
 
 class NotificationDestinationModel(LocalDestinationModel[NotificationPayloadModel]):
@@ -150,19 +145,16 @@ class ReqDestinationModel(BuiltDestinationBase):
     headers: Optional[Dict[str, Any]] = None
     timeout: Optional[Union[float, int, Tuple[Union[float, int], Union[float, int]]]] = None
     success_json: Optional[Dict[str, Any]] = None
-    sms: Optional[Dict[str, Any]] = None
-    notify: Optional[Dict[str, Any]] = None
-    ipn: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def _validate_request_preparable(self) -> "ReqDestinationModel":
         # Try to render templates with an empty mapping and then prepare a
         # `requests.Request`. This surfaces invalid URLs/headers/params at
         # config-load time instead of at first delivery attempt.
-        url = render_value(self.url, {}, has_code=False, is_alarm=False)
-        params = render_value(self.params, {}, has_code=False, is_alarm=False)
-        headers = render_value(self.headers, {}, has_code=False, is_alarm=False)
-        payload = render_value(self.payload, {}, has_code=False, is_alarm=False)
+        url = render_value(self.url, {}, has_code=False)
+        params = render_value(self.params, {}, has_code=False)
+        headers = render_value(self.headers, {}, has_code=False)
+        payload = render_value(self.payload, {}, has_code=False)
         req = requests.Request(
             method=self.method,
             url=url,
@@ -254,7 +246,7 @@ class IPNModel(_BaseCfgModel, Generic[DestT]):
 class AlarmModel(_BaseCfgModel, Generic[DestT]):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     strategy: Strategy
-    destinations: List[DestT] = Field(default_factory=list)
+    rules: List[RuleModel[DestT]] = Field(default_factory=list)
 
 
 class AppRetentionKindModel(_BaseCfgModel):
@@ -327,19 +319,11 @@ class Config:
             self.user_cfg: Dict[str, Any] = yaml.safe_load(fp) or {}
         self.effective_cfg: Dict[str, Any] = deep_merge_dicts(self.default_cfg, self.user_cfg)
         self._validate_effective_cfg()
-        alarm_destinations = self._build_alarm_destinations()
-        built_overlay = {
-            "alarm": {"destinations": alarm_destinations},
-        }
-        sms_rules = self._build_sms_rules()
-        notify_rules = self._build_notify_rules()
-        ipn_rules = self._build_ipn_rules()
-        if sms_rules:
-            built_overlay["sms"] = {"rules": sms_rules}
-        if notify_rules:
-            built_overlay["notify"] = {"rules": notify_rules}
-        if ipn_rules:
-            built_overlay["ipn"] = {"rules": ipn_rules}
+        built_overlay = {}
+        for key in ("sms", "notify", "ipn", "alarm"):
+            rules = self._build_rules_by_key(key)
+            if rules:
+                built_overlay[key] = {"rules": rules}
         self.built_cfg: Dict[str, Any] = deep_merge_dicts(self.effective_cfg, built_overlay)
         self._validate_built_cfg()
 
@@ -362,7 +346,7 @@ class Config:
 
     def _resolve_destination(self, destination: Dict[str, Any], kind: Optional[str] = None) -> Dict[str, Any]:
         # Merge precedence (low -> high):
-        #   channel defaults -> channel[kind] overlay -> user target cfg -> destination overrides
+        #   channel defaults -> channel.kinds[kind] overlay -> user target cfg -> destination overrides
         # This lets channel-level/kind-level/target-level settings compose cleanly.
         target_name = destination['target']
         targets = self.effective_cfg['target']
@@ -373,14 +357,21 @@ class Config:
         user_target_cfg = targets[target_name]
         channel_name = user_target_cfg['channel']
         channel_cfg = self.effective_cfg['channel'].get(channel_name) or {}
+        kinds = channel_cfg.get("kinds") if isinstance(channel_cfg.get("kinds"), dict) else {}
+        channel_base = {
+            key: value
+            for key, value in channel_cfg.items()
+            if key != "kinds"
+        }
 
         # Apply a per-kind overlay (e.g. channel.bark.notify) when the
         # destination is attached to a specific flow kind.
-        if kind and isinstance(channel_cfg.get(kind), dict):
-            channel_cfg = deep_merge_dicts(channel_cfg, channel_cfg[kind])
+        if kind and isinstance(kinds.get(kind), dict):
+            channel_base = deep_merge_dicts(channel_base, kinds[kind])
 
-        merged = deep_merge_dicts(channel_cfg, user_target_cfg)
+        merged = deep_merge_dicts(channel_base, user_target_cfg)
         merged = deep_merge_dicts(merged, destination)
+        merged.pop("kinds", None)
         # Default the display name to the target name; per-destination
         # `name_mark` still wins when provided.
         merged['name_mark'] = destination.get('name_mark') or target_name
@@ -413,27 +404,11 @@ class Config:
             built.append(dest_merged)
         return built
 
-    def _build_sms_rules(self) -> Optional[List[Dict[str, Any]]]:
-        sms_cfg = self.effective_cfg.get('sms')
-        if not sms_cfg.get('rules'):
-            return None
-        return self._build_rules_by_key('sms')
-
-    def _build_notify_rules(self) -> Optional[List[Dict[str, Any]]]:
-        notify_cfg = self.effective_cfg.get('notify')
-        if not notify_cfg.get('rules'):
-            return None
-        return self._build_rules_by_key('notify')
-
-    def _build_ipn_rules(self) -> Optional[List[Dict[str, Any]]]:
-        ipn_cfg = self.effective_cfg.get('ipn')
-        if not ipn_cfg.get('rules'):
-            return None
-        return self._build_rules_by_key('ipn')
-
     def _build_rules_by_key(self, key: str) -> List[Dict[str, Any]]:
         # Build a list of fully-resolved rules for a given flow kind.
         opt = self.effective_cfg.get(key)
+        if not opt.get('rules'):
+            return []
         default_strategy = opt.get('strategy')
         rules = opt.get('rules') or []
         built_rules: List[Dict[str, Any]] = []
@@ -461,16 +436,6 @@ class Config:
                 }
             )
         return built_rules
-
-    def _build_alarm_destinations(self) -> List[Dict[str, Any]]:
-        # Alarm destinations are not associated with a flow kind, so no prefix
-        # is applied; they live in a single shared namespace.
-        alarm_opt = self.effective_cfg['alarm']
-        destinations = alarm_opt['destinations']
-        try:
-            return self._build_destinations(destinations)
-        except Exception as e:
-            raise Exception(f"build_alarm_destinations error: {e}")
 
     def _validate_effective_cfg(self) -> None:
         try:

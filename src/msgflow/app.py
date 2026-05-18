@@ -7,12 +7,14 @@ import objc
 from AppKit import (
     NSAlert,
     NSAlertFirstButtonReturn,
+    NSAlertSecondButtonReturn,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
     NSEventModifierFlagCommand,
     NSEventModifierFlagOption,
     NSMenu,
     NSMenuItem,
+    NSTerminateNow,
     NSWorkspace,
 )
 from Foundation import NSObject, NSURL
@@ -71,6 +73,22 @@ class MacAppController(NSObject):
         if getattr(self, "ui_rpc_server", None) is not None:
             self.ui_rpc_server.stop()
         self.stop_managed_core()
+
+    def applicationShouldTerminate_(self, sender) -> int:
+        self._close_attached_sheets(sender)
+        return NSTerminateNow
+
+    def quitAction_(self, _sender) -> None:
+        app = NSApplication.sharedApplication()
+        self._close_attached_sheets(app)
+        app.terminate_(None)
+
+    @objc.python_method
+    def _close_attached_sheets(self, app) -> None:
+        for window in app.windows():
+            sheet = window.attachedSheet()
+            if sheet is not None:
+                window.endSheet_returnCode_(sheet, NSAlertSecondButtonReturn)
 
     @objc.python_method
     def ensure_core_running(self, wait_timeout: float = 2.0) -> bool:
@@ -285,7 +303,7 @@ class MacAppController(NSObject):
 
 
 @objc.python_method
-def _install_main_menu(app) -> None:
+def _install_main_menu(app, target) -> None:
     main_menu = NSMenu.alloc().init()
 
     app_menu_item = NSMenuItem.alloc().init()
@@ -294,7 +312,8 @@ def _install_main_menu(app) -> None:
     hide_others_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.hide_others"), "hideOtherApplications:", "h")
     hide_others_item.setKeyEquivalentModifierMask_(NSEventModifierFlagCommand | NSEventModifierFlagOption)
     show_all_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.show_all"), "unhideAllApplications:", "")
-    quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.quit"), "terminate:", "q")
+    quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(t("main.quit"), "quitAction:", "q")
+    quit_item.setTarget_(target)
     app_submenu.addItem_(hide_item)
     app_submenu.addItem_(hide_others_item)
     app_submenu.addItem_(show_all_item)
@@ -349,9 +368,9 @@ def main() -> None:
     install_unhandled_exception_logging(logger)
     app = NSApplication.sharedApplication()
     app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-    _install_main_menu(app)
     delegate = MacAppController.alloc().init()
     app.setDelegate_(delegate)
+    _install_main_menu(app, delegate)
     app.run()
 
 

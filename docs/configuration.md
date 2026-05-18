@@ -29,7 +29,7 @@ The app stores history and logs under the same config root.
 | `sms` | No | Built in | SMS/iMessage forwarding rules. |
 | `notify` | No | Built in | macOS notification forwarding rules. |
 | `ipn` | No | Built in | iPhone mirrored notification forwarding rules. |
-| `alarm` | No | Built in | Destinations for failure and silence alerts. |
+| `alarm` | No | Built in | Alarm rules for failure and silence alerts. |
 | `app` | No | Built in | App history retention settings. |
 
 Minimal config:
@@ -48,8 +48,10 @@ sms:
         - target: local_notify
 
 alarm:
-  destinations:
-    - target: local_notify
+  rules:
+    - name_mark: alerts
+      destinations:
+        - target: local_notify
 ```
 
 ## Channels
@@ -130,10 +132,10 @@ destinations:
 The final destination config is merged in this order:
 
 ```text
-channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
+channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
 ```
 
-The `<kind>` overlay is `sms`, `notify`, or `ipn` and lets a channel use different defaults for different source types.
+The `kinds.<kind>` overlay is a complete channel-config override for source-specific defaults, such as `alarm`.
 
 ## SMS Rules
 
@@ -284,7 +286,7 @@ String values can use `{{var}}` placeholders. Templates are validated at config 
 
 ```yaml
 payload:
-  title: "{{receiver}} <- {{sender}}"
+  title: "{{trans}}"
   body: "{{text}}\n{{source}} - {{time_str}}"
 ```
 
@@ -294,6 +296,7 @@ Available variables:
 | --- | --- |
 | `{{sender}}`, `{{receiver}}` | Source-specific sender and receiver fields. |
 | `{{text}}`, `{{code}}` | Runtime-only joined `title`/`subtitle`/`body` text and detected verification code. |
+| `{{trans}}` | Sender/receiver transition text joined as `sender <- receiver`. |
 | `{{timestamp}}`, `{{time_str}}` | Time fields. |
 | `{{source}}` | Configured source label. |
 | `{{msg}}` | Current message as compact JSON. |
@@ -307,13 +310,11 @@ Any value can choose a different branch by runtime context:
 ```yaml
 payload:
   title:
-    $default: "{{receiver}} <- {{sender}}"
+    $default: "{{trans}}"
     $code: "Code {{code}}"
-    $alarm: "{{source}}: {{error}}"
   body:
     $default: "{{text}}\n{{source}} - {{time_str}}"
-    $code: "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}"
-    $alarm: "{{msg}}\n\n{{traceback}}"
+    $code: "{{trans}}\n{{text}}\n{{source}} - {{time_str}}"
 ```
 
 Allowed conditional keys are:
@@ -322,7 +323,6 @@ Allowed conditional keys are:
 | --- | --- |
 | `$default` | Normal messages or fallback. |
 | `$code` | A verification code is detected. |
-| `$alarm` | The destination is rendered for an alarm. |
 
 ## Alarm
 
@@ -337,11 +337,17 @@ Example:
 ```yaml
 alarm:
   strategy: until_success
-  destinations:
-    - target: bark_phone
-      payload:
-        title: "{{source}}: {{error}}"
-        body: "{{msg}}\n\n{{traceback}}"
+  rules:
+    - name_mark: alerts
+      filters:
+        - type: selector
+          match:
+            error: true
+      destinations:
+        - target: bark_phone
+          payload:
+            title: "{{source}}: {{error}}"
+            body: "{{msg}}\n\n{{traceback}}"
 ```
 
 ## App Retention
@@ -430,11 +436,11 @@ target:
     channel: floating
     payload:
       title:
-        $default: "{{receiver}} <- {{sender}}"
+        $default: "{{trans}}"
         $code: "Code {{code}}"
       body:
         $default: "{{text}}\n{{source}} - {{time_str}}"
-        $code: "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}"
+        $code: "{{trans}}\n{{text}}\n{{source}} - {{time_str}}"
       input:
         $default: "{{text}}"
         $code: "{{code}}"
@@ -479,11 +485,17 @@ ipn:
 
 alarm:
   strategy: until_success
-  destinations:
-    - target: bark_phone
-      payload:
-        title: "{{source}}: {{error}}"
-        body: "{{msg}}\n\n{{traceback}}"
+  rules:
+    - name_mark: alerts
+      filters:
+        - type: selector
+          match:
+            error: true
+      destinations:
+        - target: bark_phone
+          payload:
+            title: "{{source}}: {{error}}"
+            body: "{{msg}}\n\n{{traceback}}"
 ```
 
 ## Cursor and History Behavior

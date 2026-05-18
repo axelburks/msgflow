@@ -4,7 +4,7 @@ import regex
 
 from ...common.run_models import RunStatus, RunTriggerType
 from ...common.templating import render_destination
-from ...common.utils import build_message_text, format_ts, get_code_from_text
+from ...common.utils import build_message_text, build_message_trans, format_ts, get_code_from_text
 from ..channels import Channels, CHANNEL_NOTIFIERS, LOCAL_CHANNELS
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class MsgFlow(Channels):
         self.rules = self.built_cfg.get(self.KIND, {}).get('rules', [])
         self.destinations = self._flatten_destinations()
         self.alarm_strategy = self.built_cfg['alarm']['strategy']
-        self.alarm_destinations = self.built_cfg['alarm']['destinations']
+        self.alarm_rules = self.built_cfg['alarm'].get('rules', [])
         self.source = self.built_cfg.get('source')
         self.init_cursor()
 
@@ -206,9 +206,11 @@ class MsgFlow(Channels):
 
     def _build_template_context(self, raw_msg: dict[str, Any]) -> dict[str, Any]:
         text = build_message_text(raw_msg)
+        trans = build_message_trans(raw_msg)
         return {
             "source": self.source,
             "text": text,
+            "trans": trans,
             "code": get_code_from_text(text),
         }
 
@@ -247,7 +249,6 @@ class MsgFlow(Channels):
         msg_code = msg.get("code")
         if msg_code:
             _observe_log(f"🔐 {msg_code}")
-        msg["msg"] = json.dumps(msg, ensure_ascii=False, default=str)
         msg_key = msg.get(self.CURSOR_FIELD)
         msg_ts = msg.get("timestamp")
 
@@ -336,7 +337,7 @@ class MsgFlow(Channels):
                 if not key_passed:
                     continue
 
-                rendered_dest = render_destination(dest, msg, is_alarm=False)
+                rendered_dest = render_destination(dest, msg)
                 dest_result["rendered_destination"] = rendered_dest
                 cur_status, cur_res = self._send_to_destination(rendered_dest)
 
@@ -437,8 +438,10 @@ class MsgFlow(Channels):
             dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
             try:
                 check_title = f"{dest_mark} check passed"
-                check_msg = {"source": self.source}
-                rendered_dest = render_destination(dest, check_msg, is_alarm=True, error=check_title)
+                check_msg = {
+                    "source": self.source
+                }
+                rendered_dest = render_destination(dest, check_msg, error=check_title)
                 cur_status, cur_res = self._send_to_destination(rendered_dest)
                 if not cur_status:
                     logger.error(f"❌ {dest_mark} error: {cur_res}")
@@ -447,8 +450,13 @@ class MsgFlow(Channels):
                 logger.error(f"❌ {dest_mark} error: {e}")
                 sys.exit(1)
 
-    def send_alarm(self, msg: Optional[dict[str, Any]] = None, **kwargs: Any) -> bool:
-        # Fan out an alarm message to alarm destinations according to `alarm_strategy`.
+    def send_alarm(
+        self,
+        msg: Optional[dict[str, Any]] = None,
+        error: Optional[str] = None,
+        traceback: Optional[str] = None,
+    ) -> bool:
+        # Fan out an alarm message through alarm rules according to each rule's strategy.
         # - "until_success": stop at the first successful delivery
         # - "all":           deliver to all; success means no destination failed
         if msg is None:
@@ -456,18 +464,27 @@ class MsgFlow(Channels):
         logger.info(f"{'#' * 15} ⚠️  {self.KIND} alarm start {'#' * 15}")
         try:
             msg['source'] = self.source
+            msg.update(self._build_template_context(msg))
             any_success = False
             any_failed = False
-            for dest in self.alarm_destinations:
-                rendered_dest = render_destination(dest, msg, is_alarm=True, **kwargs)
-                cur_status, cur_res = self._send_to_destination(rendered_dest)
-                if cur_status:
-                    any_success = True
-                    if self.alarm_strategy == 'until_success':
-                        return True
-                else:
-                    any_failed = True
-                    logger.error(f"❌ alarm failed: {cur_res}")
+            for rule in self.alarm_rules:
+                rule_name = rule.get("name_mark")
+                rule_filters = rule.get("filters")
+                rule_strategy = rule.get("strategy") or self.alarm_strategy
+                _observe_log(f"📏 alarm_{rule_name}({rule_strategy})")
+                filters_matched, _ = self._build_filter_results(msg, rule_filters)
+                if not filters_matched:
+                    continue
+                for dest in rule.get("destinations") or []:
+                    rendered_dest = render_destination(dest, msg, error=error, traceback=traceback)
+                    cur_status, cur_res = self._send_to_destination(rendered_dest)
+                    if cur_status:
+                        any_success = True
+                        if rule_strategy == 'until_success':
+                            break
+                    else:
+                        any_failed = True
+                        logger.error(f"❌ alarm failed: {cur_res}")
             if self.alarm_strategy == 'all':
                 return not any_failed
             return any_success

@@ -99,6 +99,8 @@ class HistoryStore(object):
             conn.commit()
 
     def _json_dumps(self, value: Any) -> str:
+        if isinstance(value, str):
+            return value
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
 
     def _json_loads(self, value: Any) -> Any:
@@ -153,9 +155,6 @@ class HistoryStore(object):
 
     def insert_message(self, kind: str, cursor_field: str, message: dict[str, Any]) -> int:
         now = time.time()
-        title = message.get("title")
-        subtitle = message.get("subtitle")
-        body = message.get("body")
         with self._lock:
             conn = self._connect()
             cursor = conn.execute(
@@ -169,13 +168,13 @@ class HistoryStore(object):
                     kind,
                     message.get("sender"),
                     message.get("receiver"),
-                    title,
-                    subtitle,
-                    body,
+                    message.get("title"),
+                    message.get("subtitle"),
+                    message.get("body"),
                     message.get("time_str"),
                     message.get("timestamp"),
                     message.get(cursor_field),
-                    self._json_dumps(message),
+                    self._json_dumps(message.get("msg")),
                     now,
                 ),
             )

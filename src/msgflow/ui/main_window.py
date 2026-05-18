@@ -22,6 +22,7 @@ from AppKit import (
     NSEvent,
     NSMakePoint,
     NSMakeRect,
+    NSStringDrawingUsesLineFragmentOrigin,
     NSMomentaryChangeButton,
     NSPopUpButton,
     NSScrollView,
@@ -31,6 +32,7 @@ from AppKit import (
     NSTableView,
     NSTextField,
     NSTextFieldCell,
+    NSTextView,
     NSTrackingActiveAlways,
     NSTrackingArea,
     NSTrackingInVisibleRect,
@@ -47,7 +49,7 @@ from AppKit import (
     NSWindowStyleMaskTitled,
     NSWorkspace,
 )
-from Foundation import NSAttributedString, NSObject, NSNotificationCenter, NSURL
+from Foundation import NSAttributedString, NSMakeSize, NSObject, NSNotificationCenter, NSURL
 from WebKit import WKWebView, WKWebViewConfiguration
 
 from ..common.record_query import FIELD_MAP, parse_query
@@ -68,7 +70,11 @@ class AppCommandWebView(WKWebView):
         characters = str(event.charactersIgnoringModifiers() or "").lower()
         has_command = bool(int(event.modifierFlags()) & int(NSEventModifierFlagCommand))
         if has_command and characters == "q":
-            NSApp.terminate_(None)
+            delegate = NSApp.delegate()
+            if delegate is not None and hasattr(delegate, "quitAction_"):
+                delegate.quitAction_(None)
+            else:
+                NSApp.terminate_(None)
             return True
         return objc.super(AppCommandWebView, self).performKeyEquivalent_(event)
 
@@ -301,6 +307,9 @@ class MainWindowController(NSObject):
     ACTION_ICON_WIDTH = 32.0
     ACTION_BUTTON_GAP = 8.0
     ACTION_GROUP_GAP = 16.0
+    ACTION_SHEET_WIDTH = 680.0
+    ACTION_SHEET_SUMMARY_MAX_HEIGHT = 360.0
+    ACTION_SHEET_RESEND_MAX_HEIGHT = 260.0
     PANEL_CORNER_RADIUS = 5.0
     PANEL_BORDER_WIDTH = 0.65
     PANEL_CONTENT_INSET = 1.0
@@ -362,6 +371,9 @@ class MainWindowController(NSObject):
         self._is_loading_more = False
         self._resend_sheet_popup = None
         self._resend_sheet_options: list[tuple[str, str]] = []
+        self._pending_rematch_message_ids: list[int] = []
+        self._pending_delete_run_ids: list[int] = []
+        self._resend_sheet_rows: list[tuple[int, NSPopUpButton, list[tuple[str, str]]]] = []
         self._cursor_sheet_rows: list[tuple[str, str, Any]] = []
         self._jsoneditor_js_source = self._load_svelte_jsoneditor_js_for_inline_script()
         self._jsoneditor_base_url = NSURL.fileURLWithPath_isDirectory_(str(assets_dir()), True)
@@ -575,6 +587,7 @@ class MainWindowController(NSObject):
         self.table_view.setDataSource_(self)
         self.table_view.setRowHeight_(124)
         self.table_view.setBackgroundColor_(NSColor.whiteColor())
+        self.table_view.setAllowsMultipleSelection_(True)
         column = NSTableColumn.alloc().initWithIdentifier_("run")
         column.setWidth_(554)
         self.table_view.addTableColumn_(column)
@@ -888,71 +901,65 @@ class MainWindowController(NSObject):
             self._show_error(str(e))
 
     def rematchAction_(self, _sender) -> None:
-        current = self._current_item()
-        if current is None:
+        selected_items = self._selected_items()
+        if not selected_items:
             self._show_error(t("alert.no_selection"))
             return
+        self._pending_rematch_message_ids = [int(item["message_id"]) for item in selected_items]
         alert = self._confirmation_alert(
             t("alert.rematch_title"),
-            (
-                f"{self._selected_run_summary(current)}\n\n"
-                f"{t('alert.rematch_detail')}"
-            ),
+            t("alert.rematch_detail"),
             t("action.rematch"),
         )
+        alert.setAccessoryView_(self._build_selected_runs_summary_view(selected_items))
         alert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_(
             self.window,
             self,
             "rematchConfirmationDidEnd:returnCode:contextInfo:",
-            int(current["message_id"]),
+            0,
         )
 
     def resendAction_(self, _sender) -> None:
-        current = self._current_item()
-        selected_run = self._selected_run_record()
-        if current is None or selected_run is None:
+        selected_items = self._selected_items()
+        if not selected_items:
             self._show_error(t("alert.no_selection"))
             return
-        options = self._collect_dest_options(selected_run)
-        if not options:
+        rows = self._build_resend_rows(selected_items)
+        if not rows:
             self._show_error(t("alert.no_destinations"))
             return
-        popup = NSPopUpButton.alloc().initWithFrame_pullsDown_(NSMakeRect(0, 0, 360, 28), False)
-        for rule_name, dest_name in options:
-            popup.addItemWithTitle_(f"{rule_name} -> {dest_name}")
         alert = NSAlert.alloc().init()
         alert.setMessageText_(t("alert.resend_title"))
         alert.setInformativeText_(t("alert.resend_detail"))
-        alert.setAccessoryView_(popup)
+        accessory_view = self._build_resend_accessory_view(rows, selected_items)
+        alert.setAccessoryView_(accessory_view)
         alert.addButtonWithTitle_(t("action.resend"))
         alert.addButtonWithTitle_(t("action.cancel"))
-        self._resend_sheet_popup = popup
-        self._resend_sheet_options = options
+        self._resend_sheet_rows = rows
         alert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_(
             self.window,
             self,
             "resendSheetDidEnd:returnCode:contextInfo:",
-            int(current["message_id"]),
+            0,
         )
 
     def deleteAction_(self, _sender) -> None:
-        current = self._current_item()
-        if current is None:
+        selected_items = self._selected_items()
+        if not selected_items:
             self._show_error(t("alert.no_selection"))
             return
+        self._pending_delete_run_ids = [int(item["run_id"]) for item in selected_items]
         alert = self._confirmation_alert(
             t("alert.delete_title"),
-            (
-                f"{self._selected_run_summary(current)}\n\n"
-                f"{t('alert.delete_detail')}"
-            ),
+            t("alert.delete_detail"),
             t("action.delete"),
         )
+        alert.setAccessoryView_(self._build_selected_runs_summary_view(selected_items))
         alert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_(
             self.window,
             self,
             "deleteConfirmationDidEnd:returnCode:contextInfo:",
-            int(current["run_id"]),
+            0,
         )
 
     @objc.python_method
@@ -982,6 +989,55 @@ class MainWindowController(NSObject):
         return summary
 
     @objc.python_method
+    def _selected_runs_summary(self, items: list[dict[str, Any]]) -> str:
+        summaries = [self._selected_run_summary(item) for item in items]
+        return "\n\n".join(summaries)
+
+    @objc.python_method
+    def _wrapped_text_height(self, text: str, width: float, font) -> float:
+        attributed = NSAttributedString.alloc().initWithString_attributes_(text, {NSFontAttributeName: font})
+        bounds = attributed.boundingRectWithSize_options_(
+            NSMakeSize(width, 100000.0),
+            NSStringDrawingUsesLineFragmentOrigin,
+        )
+        return max(24.0, float(bounds.size.height) + 12.0)
+
+    @objc.python_method
+    def _build_scrollable_text_view(self, text: str, width: float, max_height: float):
+        font = NSFont.systemFontOfSize_(12)
+        text_height = self._wrapped_text_height(text, width, font)
+        visible_height = min(max(text_height, 80.0), max_height)
+        document_height = max(text_height, visible_height)
+        text_view = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, width, document_height))
+        text_view.setDrawsBackground_(False)
+        text_view.setEditable_(False)
+        text_view.setSelectable_(True)
+        text_view.setRichText_(False)
+        text_view.setHorizontallyResizable_(False)
+        text_view.setVerticallyResizable_(True)
+        text_view.setMinSize_(NSMakeSize(0.0, visible_height))
+        text_view.setMaxSize_(NSMakeSize(width, 100000.0))
+        text_view.setTextContainerInset_(NSMakeSize(0.0, 4.0))
+        text_view.textContainer().setContainerSize_(NSMakeSize(width, 100000.0))
+        text_view.textContainer().setWidthTracksTextView_(True)
+        text_view.setFont_(font)
+        text_view.setString_(text)
+
+        scroll_view = NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, width, visible_height))
+        scroll_view.setHasVerticalScroller_(text_height > visible_height)
+        scroll_view.setAutohidesScrollers_(True)
+        scroll_view.setDocumentView_(text_view)
+        return scroll_view
+
+    @objc.python_method
+    def _build_selected_runs_summary_view(self, items: list[dict[str, Any]]):
+        return self._build_scrollable_text_view(
+            self._selected_runs_summary(items),
+            self.ACTION_SHEET_WIDTH,
+            self.ACTION_SHEET_SUMMARY_MAX_HEIGHT,
+        )
+
+    @objc.python_method
     def _perform_rematch(self, message_id: int) -> None:
         try:
             result = core_client.rematch_and_send(message_id)
@@ -991,9 +1047,29 @@ class MainWindowController(NSObject):
             self._show_error(str(e))
 
     @objc.python_method
+    def _perform_batch_rematch(self, message_ids: list[int]) -> None:
+        results = []
+        try:
+            for message_id in message_ids:
+                results.append(core_client.rematch_and_send(message_id))
+            self.refresh_data()
+            self._show_batch_run_action_result(t("action.rematch"), results)
+        except Exception as e:
+            self._show_error(str(e))
+
+    @objc.python_method
     def _perform_delete(self, run_id: int) -> None:
         try:
             core_client.delete_run(run_id)
+            self.refresh_data()
+        except Exception as e:
+            self._show_error(str(e))
+
+    @objc.python_method
+    def _perform_batch_delete(self, run_ids: list[int]) -> None:
+        try:
+            for run_id in run_ids:
+                core_client.delete_run(run_id)
             self.refresh_data()
         except Exception as e:
             self._show_error(str(e))
@@ -1065,6 +1141,92 @@ class MainWindowController(NSObject):
                 if rule_name and dest_name:
                     options.append((str(rule_name), str(dest_name)))
         return options
+
+    @objc.python_method
+    def _selected_items(self) -> list[dict[str, Any]]:
+        indexes = self.table_view.selectedRowIndexes()
+        items = []
+        for row in range(len(self.run_items)):
+            if indexes.containsIndex_(row):
+                items.append(self.run_items[row])
+        if not items:
+            current = self._current_item()
+            if current is not None:
+                items.append(current)
+        return items
+
+    @objc.python_method
+    def _run_record_for_item(self, item: dict[str, Any]) -> Optional[dict[str, Any]]:
+        message_id = int(item["message_id"])
+        if (
+            self.selected_message_detail is not None
+            and int((self.selected_message_detail.get("message") or {}).get("id") or -1) == message_id
+        ):
+            detail = self.selected_message_detail
+        else:
+            detail = core_client.get_message_detail(message_id)
+        for run in detail.get("runs") or []:
+            if int(run.get("id")) == int(item["run_id"]):
+                return run
+        return None
+
+    @objc.python_method
+    def _build_resend_rows(self, items: list[dict[str, Any]]) -> list[tuple[int, NSPopUpButton, list[tuple[str, str]]]]:
+        rows = []
+        for item in items:
+            run_record = self._run_record_for_item(item)
+            if run_record is None:
+                continue
+            options = self._collect_dest_options(run_record)
+            if not options:
+                continue
+            popup = NSPopUpButton.alloc().initWithFrame_pullsDown_(NSMakeRect(0, 0, 0, 28), False)
+            for rule_name, dest_name in options:
+                popup.addItemWithTitle_(f"{rule_name} -> {dest_name}")
+            rows.append((int(item["message_id"]), popup, options))
+        return rows
+
+    @objc.python_method
+    def _build_resend_accessory_view(
+        self,
+        rows: list[tuple[int, NSPopUpButton, list[tuple[str, str]]]],
+        selected_items: list[dict[str, Any]],
+    ):
+        row_height = 34.0
+        width = self.ACTION_SHEET_WIDTH
+        control_padding = 10.0
+        vertical_padding = 8.0
+        label_width = 118.0
+        popup_x = control_padding + label_width + 10.0
+        popup_width = width - popup_x - control_padding
+        total_height = max(row_height, (row_height * len(rows)) + (vertical_padding * 2.0))
+        visible_height = min(max(total_height, row_height), self.ACTION_SHEET_RESEND_MAX_HEIGHT)
+        summary_view = self._build_selected_runs_summary_view(selected_items)
+        summary_height = summary_view.frame().size.height
+        gap = 14.0
+        parent_height = summary_height + gap + visible_height
+        parent_view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, parent_height))
+
+        summary_view.setFrame_(NSMakeRect(0, visible_height + gap, width, summary_height))
+        parent_view.addSubview_(summary_view)
+
+        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, total_height))
+        for idx, (message_id, popup, _options) in enumerate(rows):
+            y = total_height - vertical_padding - ((idx + 1) * row_height)
+            label = NSTextField.alloc().initWithFrame_(NSMakeRect(control_padding, y + 4, label_width, 22))
+            label.setEditable_(False)
+            label.setBordered_(False)
+            label.setDrawsBackground_(False)
+            label.setStringValue_(f"{t('run.message_id')}: {message_id}")
+            popup.setFrame_(NSMakeRect(popup_x, y, popup_width, 28))
+            view.addSubview_(label)
+            view.addSubview_(popup)
+        scroll_view = NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, width, visible_height))
+        scroll_view.setHasVerticalScroller_(total_height > visible_height)
+        scroll_view.setDocumentView_(view)
+        view.scrollPoint_(NSMakePoint(0.0, total_height))
+        parent_view.addSubview_(scroll_view)
+        return parent_view
 
     @objc.python_method
     def _current_item(self) -> Optional[dict[str, Any]]:
@@ -1483,34 +1645,43 @@ class MainWindowController(NSObject):
     @objc.selectorFor(NSAlert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_)
     def rematchConfirmationDidEnd_returnCode_contextInfo_(self, _alert, returnCode, contextInfo) -> None:
         if int(returnCode) != 1000:
+            self._pending_rematch_message_ids = []
             return
-        self._perform_rematch(int(contextInfo))
+        message_ids = list(self._pending_rematch_message_ids)
+        self._pending_rematch_message_ids = []
+        if message_ids:
+            self._perform_batch_rematch(message_ids)
 
     @objc.selectorFor(NSAlert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_)
     def resendSheetDidEnd_returnCode_contextInfo_(self, _alert, returnCode, contextInfo) -> None:
-        if int(returnCode) != 1000 or self._resend_sheet_popup is None:
-            self._resend_sheet_popup = None
-            self._resend_sheet_options = []
+        if int(returnCode) != 1000 or not self._resend_sheet_rows:
+            self._resend_sheet_rows = []
             return
-        selected_title = self._resend_sheet_popup.titleOfSelectedItem()
-        selected_rule, selected_dest = next(
-            (item for item in self._resend_sheet_options if f"{item[0]} -> {item[1]}" == selected_title),
-            self._resend_sheet_options[0],
-        )
-        self._resend_sheet_popup = None
-        self._resend_sheet_options = []
+        rows = list(self._resend_sheet_rows)
+        self._resend_sheet_rows = []
         try:
-            result = core_client.resend_destination(int(contextInfo), selected_rule, selected_dest)
+            results = []
+            for message_id, popup, options in rows:
+                selected_title = popup.titleOfSelectedItem()
+                selected_rule, selected_dest = next(
+                    (item for item in options if f"{item[0]} -> {item[1]}" == selected_title),
+                    options[0],
+                )
+                results.append(core_client.resend_destination(message_id, selected_rule, selected_dest))
             self.refresh_data()
-            self._show_run_action_result(t("action.resend"), result)
+            self._show_batch_run_action_result(t("action.resend"), results)
         except Exception as e:
             self._show_error(str(e))
 
     @objc.selectorFor(NSAlert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_)
     def deleteConfirmationDidEnd_returnCode_contextInfo_(self, _alert, returnCode, contextInfo) -> None:
         if int(returnCode) != 1000:
+            self._pending_delete_run_ids = []
             return
-        self._perform_delete(int(contextInfo))
+        run_ids = list(self._pending_delete_run_ids)
+        self._pending_delete_run_ids = []
+        if run_ids:
+            self._perform_batch_delete(run_ids)
 
     @objc.selectorFor(NSAlert.beginSheetModalForWindow_modalDelegate_didEndSelector_contextInfo_)
     def cursorSheetDidEnd_returnCode_contextInfo_(self, _alert, returnCode, _contextInfo) -> None:
@@ -1572,8 +1743,7 @@ class MainWindowController(NSObject):
 
     @objc.python_method
     def _populate_run_cell_view(self, cell, item: dict[str, Any]) -> None:
-        sender = item.get("sender") or ""
-        receiver = item.get("receiver") or ""
+        trans = " <- ".join(str(part) for part in [item.get("sender"), item.get("receiver")] if part)
         text_preview = (item.get("text_preview") or "").replace("\n", " ").strip()
         cursor_value = item.get("cursor_value")
         cursor_text = self._format_cursor_value(cursor_value)
@@ -1588,7 +1758,7 @@ class MainWindowController(NSObject):
         line1_left.setStringValue_(f"{item.get('run_id')}({item.get('message_id')})")
         line1_middle.setStringValue_(str(item.get("status") or ""))
         line1_right.setStringValue_(str(item.get("created_at_str") or ""))
-        line2.setStringValue_(f"{sender} -> {receiver}")
+        line2.setStringValue_(trans)
         line3.setStringValue_(text_preview)
         line4_left.setStringValue_(str(item.get("trigger_type") or ""))
         line4_middle.setStringValue_(str(item.get("time_str") or ""))
@@ -1679,4 +1849,19 @@ class MainWindowController(NSObject):
         alert = NSAlert.alloc().init()
         alert.setMessageText_(title)
         alert.setInformativeText_(detail)
+        alert.runModal()
+
+    @objc.python_method
+    def _show_batch_run_action_result(self, action_name: str, payloads: list[dict[str, Any]]) -> None:
+        if len(payloads) == 1:
+            self._show_run_action_result(action_name, payloads[0])
+            return
+        lines = []
+        for idx, payload in enumerate(payloads, start=1):
+            status = str(payload.get("status") or "").strip().lower()
+            run_id = payload.get("run_id")
+            lines.append(f"{idx}. {t('run_action.status', action=action_name, status=status, run_id=run_id)}")
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_(action_name)
+        alert.setInformativeText_("\n".join(lines))
         alert.runModal()

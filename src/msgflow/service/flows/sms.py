@@ -55,14 +55,15 @@ class SMSFlow(MsgFlow):
         # no arithmetic per row and templates/logs still see a clean float.
         sql = """
         select
-            message.ROWID AS rowid,
-            ifnull(handle.uncanonicalized_id, chat.chat_identifier) AS sender,
+            message.ROWID,
             message.service,
-            message.date,
-            message.subject AS title,
-            message.text AS body,
+            handle.uncanonicalized_id,
+            chat.chat_identifier,
+            message.destination_caller_id,
+            message.subject,
+            message.text,
             message.attributedBody,
-            message.destination_caller_id AS receiver
+            message.date
         from
             message
                 left join chat_message_join
@@ -85,14 +86,27 @@ class SMSFlow(MsgFlow):
         # - attach `time_str` for templates/logs
         # - drop rows with no textual content, falling back to decoding
         #   attributedBody (typedstream blob) when the plain `body` column is empty
+        result = []
         for row in data[:]:
-            raw_date = row.get('date') or 0
-            row['timestamp'] = float(raw_date) / self._NS_PER_SEC + MAC_EPOCH_OFFSET
-            row['time_str'] = format_ts(row['timestamp'])
-            if not row.get('body'):
+            if not row.get('text'):
                 if row.get('attributedBody'):
-                    row['body'] = _extract_from_applearchive(row.get('attributedBody'))
+                    row['attributedBody'] = _extract_from_applearchive(row.get('attributedBody'))
                 else:
                     data.remove(row)
-            row.pop('attributedBody', None)
-        return data
+                    continue
+            else:
+                row.pop('attributedBody', None)
+            timestamp = float(row.get('date') or 0) / self._NS_PER_SEC + MAC_EPOCH_OFFSET
+            time_str = format_ts(timestamp)
+            msg = {
+                "rowid": row.get('ROWID'),
+                "sender": row.get('uncanonicalized_id') or row.get('chat_identifier'),
+                "receiver": row.get('destination_caller_id'),
+                "title": row.get('subject'),
+                "body": row.get('text') or row.get('attributedBody'),
+                "time_str": time_str,
+                "timestamp": timestamp,
+                "msg": row
+            }
+            result.append(msg)
+        return result

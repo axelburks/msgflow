@@ -22,10 +22,22 @@ def test_build_tpl_mapping_prefers_message_values_over_kwargs():
     assert mapping["text"] == "from-kwargs"
 
 
-def test_build_tpl_mapping_derives_text_from_non_empty_title_subtitle_body():
+def test_build_tpl_mapping_does_not_derive_text_from_title_subtitle_body():
     mapping = build_tpl_mapping({"title": "Title", "subtitle": "", "body": "Body"})
 
-    assert mapping["text"] == "Title\nBody"
+    assert mapping["text"] is None
+
+
+def test_build_tpl_mapping_does_not_derive_trans_from_sender_receiver():
+    mapping = build_tpl_mapping({"sender": "Alice", "receiver": "Bob"})
+
+    assert mapping["trans"] is None
+
+
+def test_build_tpl_mapping_renders_nested_msg_as_compact_json():
+    mapping = build_tpl_mapping({"sender": "Alice", "msg": {"rowid": 1, "service": "SMS"}})
+
+    assert mapping["msg"] == '{"rowid":1,"service":"SMS"}'
 
 
 def test_condition_dict_detection_requires_non_empty_allowed_keys_only():
@@ -34,13 +46,12 @@ def test_condition_dict_detection_requires_non_empty_allowed_keys_only():
     assert not is_value_condition_dict({"$default": "normal", "custom": "bad"})
 
 
-def test_select_value_by_condition_uses_alarm_then_code_then_default_priority():
-    value = {"$default": "normal", "$code": "code", "$alarm": "alarm"}
+def test_select_value_by_condition_uses_code_then_default_priority():
+    value = {"$default": "normal", "$code": "code"}
 
-    assert select_value_by_condition(value, has_code=True, is_alarm=True) == "alarm"
-    assert select_value_by_condition(value, has_code=True, is_alarm=False) == "code"
-    assert select_value_by_condition(value, has_code=False, is_alarm=False) == "normal"
-    assert select_value_by_condition({"$code": "fallback"}, has_code=False, is_alarm=False) == "fallback"
+    assert select_value_by_condition(value, has_code=True) == "code"
+    assert select_value_by_condition(value, has_code=False) == "normal"
+    assert select_value_by_condition({"$code": "fallback"}, has_code=False) == "fallback"
 
 
 def test_collect_tpl_vars_descends_into_payload_json_strings():
@@ -59,7 +70,6 @@ def test_render_value_parses_payload_json_and_renders_nested_templates():
         '{"text":"{{text}}","copy":"{{code}}"}',
         {"text": "hello", "code": "123456"},
         has_code=True,
-        is_alarm=False,
         key_name="payload",
     )
 

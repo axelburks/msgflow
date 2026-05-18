@@ -103,8 +103,10 @@ sms:
         - target: local_notify
 
 alarm:
-  destinations:
-    - target: local_notify
+  rules:
+    - name_mark: alerts
+      destinations:
+        - target: local_notify
 ```
 
 Start `msgflow.app` to begin listening for and forwarding messages.
@@ -119,14 +121,14 @@ The main blocks are:
 - `sms.rules`: SMS/iMessage forwarding rules.
 - `notify.rules`: macOS notification record forwarding rules.
 - `ipn.rules`: iPhone mirrored notification forwarding rules.
-- `alarm.destinations`: alert destinations used when delivery fails or a source is silent for too long.
+- `alarm.rules`: alert rules used when delivery fails or a source is silent for too long.
 - `channel`: optional shared defaults for channels.
 - `app`: optional app history retention settings.
 
 Each destination's final config is merged from three layers, where later layers override earlier ones:
 
 ```text
-channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
+channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
 ```
 
 See [Configuration](./docs/configuration.md) for the full config structure, template variables, filters, command-line options, and complete examples.
@@ -160,8 +162,10 @@ sms:
         - target: bark_phone
 
 alarm:
-  destinations:
-    - target: bark_phone
+  rules:
+    - name_mark: alerts
+      destinations:
+        - target: bark_phone
 ```
 
 ## App Features
@@ -189,7 +193,7 @@ alarm:
 - [x] Rule-based forwarding with `and`, `or`, and `selector`
 - [x] Two delivery strategies: `until_success` / `all`
 - [x] Support exception alert notifications (alarm)
-- [x] Conditional templates based on `$default`, `$code`, and `$alarm`
+- [x] Conditional templates based on `$default` and `$code`
 - [x] Strict Pydantic config validation
 - [x] Support listening to macOS notification messages
 - [x] App version with initial support for the menu bar, listener status switching, history window, and other basic features
@@ -198,6 +202,7 @@ alarm:
 - [x] Use unix sockets for rpc communication
 - [x] App support for multilingual UI
 - [x] Support listening to notifications from iPhone
+- [x] Rule-based alarm notifications
 - [ ] App support for signing and building the app
 
 ## Documentation

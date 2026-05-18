@@ -1,13 +1,14 @@
 import copy
+import json
 from typing import Any, Optional
 import regex
 
-from .utils import build_message_text, try_parse_json
+from .utils import try_parse_json
 
 # Template variables are written as {{name}} and matched with this regex.
 TPL_VAR_PATTERN = r"\{\{(\w+)\}\}"
-# Allowed "conditional" keys for a value that varies by context (normal/code/alarm).
-ALLOWED_COND_KEYS = ("$default", "$code", "$alarm")
+# Allowed "conditional" keys for a value that varies by runtime context.
+ALLOWED_COND_KEYS = ("$default", "$code")
 
 
 def render_template(template: Any, mapping: Optional[dict[str, Any]]) -> str:
@@ -33,14 +34,16 @@ def build_tpl_mapping(msg: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
     # Build the var -> value mapping used by `render_template`.
     # Pre-declare every well-known key so `ALLOWED_MATCH_TPL_VARS` reflects
     # the full set of supported variables (see module footer).
-    text = build_message_text(msg)
+    raw_msg = msg.get("msg")
+    msg_text = raw_msg if isinstance(raw_msg, str) else json.dumps(raw_msg, ensure_ascii=False, separators=(",", ":"), default=str)
     mapping = {
         "sender": msg.get('sender'),
         "receiver": msg.get('receiver'),
-        "text": text or None,
+        "text": msg.get('text'),
+        "trans": msg.get('trans'),
         "timestamp": msg.get('timestamp'),
         "time_str": msg.get('time_str'),
-        "msg": msg.get('msg'),
+        "msg": msg_text,
         "code": msg.get('code'),
         "source": msg.get('source'),
         "title": msg.get('title'),
@@ -60,17 +63,15 @@ def build_tpl_mapping(msg: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
 
 def is_value_condition_dict(value: Any) -> bool:
     # True iff `value` is a non-empty dict whose keys are ALL in ALLOWED_COND_KEYS
-    # (i.e. a conditional value like {"$default": ..., "$code": ..., "$alarm": ...}).
+    # (i.e. a conditional value like {"$default": ..., "$code": ...}).
     if not isinstance(value, dict) or not value:
         return False
     return all(k in ALLOWED_COND_KEYS for k in value.keys())
 
 
-def select_value_by_condition(value_dict: dict[str, Any], has_code: bool, is_alarm: bool) -> Any:
+def select_value_by_condition(value_dict: dict[str, Any], has_code: bool) -> Any:
     # Choose which branch of a conditional value to use based on runtime context.
-    # Priority: alarm -> code -> default -> first available key.
-    if is_alarm and "$alarm" in value_dict:
-        return value_dict["$alarm"]
+    # Priority: code -> default -> first available key.
     if has_code and "$code" in value_dict:
         return value_dict["$code"]
     if "$default" in value_dict:
@@ -118,23 +119,22 @@ def render_value(
     value: Any,
     mapping: dict[str, Any],
     has_code: bool,
-    is_alarm: bool,
     key_name: Optional[str] = None,
 ) -> Any:
     # Recursive counterpart to `collect_tpl_vars`: actually substitute values.
     # Conditional dicts are collapsed first, then primitives are rendered.
     if is_value_condition_dict(value):
-        chosen = select_value_by_condition(value, has_code=has_code, is_alarm=is_alarm)
-        return render_value(chosen, mapping, has_code=has_code, is_alarm=is_alarm, key_name=key_name)
+        chosen = select_value_by_condition(value, has_code=has_code)
+        return render_value(chosen, mapping, has_code=has_code, key_name=key_name)
 
     if isinstance(value, dict):
         rendered = {}
         for k, v in value.items():
-            rendered[k] = render_value(v, mapping, has_code=has_code, is_alarm=is_alarm, key_name=k)
+            rendered[k] = render_value(v, mapping, has_code=has_code, key_name=k)
         return rendered
 
     if isinstance(value, list):
-        return [render_value(v, mapping, has_code=has_code, is_alarm=is_alarm, key_name=key_name) for v in value]
+        return [render_value(v, mapping, has_code=has_code, key_name=key_name) for v in value]
 
     if isinstance(value, str):
         # Parse-and-re-render when the string is actually a JSON blob under
@@ -143,7 +143,7 @@ def render_value(
         if key_name == "payload":
             parsed = try_parse_json(value)
             if isinstance(parsed, (dict, list)):
-                return render_value(parsed, mapping, has_code=has_code, is_alarm=is_alarm, key_name=None)
+                return render_value(parsed, mapping, has_code=has_code, key_name=None)
         return render_template(value, mapping)
 
     return value
@@ -152,7 +152,6 @@ def render_value(
 def render_destination(
     dest: dict[str, Any],
     msg: Optional[dict[str, Any]] = None,
-    is_alarm: bool = False,
     **kwargs: Any,
 ) -> dict[str, Any]:
     # Render an entire destination template against `msg`. Returns a deep-copied
@@ -165,7 +164,7 @@ def render_destination(
     # HTML escaping path) can access it without re-parsing the payload.
     rendered_dest["code"] = msg.get('code')
     has_code = bool(msg.get('code'))
-    rendered_dest = render_value(rendered_dest, mapping, has_code=has_code, is_alarm=is_alarm)
+    rendered_dest = render_value(rendered_dest, mapping, has_code=has_code)
     return rendered_dest
 
 

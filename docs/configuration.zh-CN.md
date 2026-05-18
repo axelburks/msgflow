@@ -29,7 +29,7 @@ App 会在同一个配置根目录下保存历史记录和日志。
 | `sms` | 否 | 内置 | 短信/iMessage 转发规则。 |
 | `notify` | 否 | 内置 | macOS 通知记录转发规则。 |
 | `ipn` | 否 | 内置 | iPhone 镜像通知转发规则。 |
-| `alarm` | 否 | 内置 | 失败和静默告警的投递目标。 |
+| `alarm` | 否 | 内置 | 失败和静默告警规则。 |
 | `app` | 否 | 内置 | App 历史记录保留设置。 |
 
 最小配置：
@@ -48,8 +48,10 @@ sms:
         - target: local_notify
 
 alarm:
-  destinations:
-    - target: local_notify
+  rules:
+    - name_mark: alerts
+      destinations:
+        - target: local_notify
 ```
 
 ## 通道
@@ -130,10 +132,10 @@ destinations:
 最终 destination 配置按以下顺序合并：
 
 ```text
-channel.<channel> < channel.<channel>.<kind> < target.<name> < rule.destinations[]
+channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
 ```
 
-`<kind>` 覆盖层可以是 `sms`、`notify` 或 `ipn`，用于让同一通道针对不同消息源使用不同默认值。
+`kinds.<kind>` 覆盖层是完整的 channel 配置覆盖，可用于 `alarm` 等来源特定默认值。
 
 ## 短信规则
 
@@ -284,7 +286,7 @@ filters:
 
 ```yaml
 payload:
-  title: "{{receiver}} <- {{sender}}"
+  title: "{{trans}}"
   body: "{{text}}\n{{source}} - {{time_str}}"
 ```
 
@@ -294,6 +296,7 @@ payload:
 | --- | --- |
 | `{{sender}}`, `{{receiver}}` | 消息源相关的发送方和接收方字段。 |
 | `{{text}}`, `{{code}}` | 运行时由 `title`/`subtitle`/`body` 拼接出的文本和识别到的验证码。 |
+| `{{trans}}` | 由 sender/receiver 用 ` <- ` 拼接出的流转文本。 |
 | `{{timestamp}}`, `{{time_str}}` | 时间字段。 |
 | `{{source}}` | 配置的来源标签。 |
 | `{{msg}}` | 当前消息的紧凑 JSON。 |
@@ -307,13 +310,11 @@ payload:
 ```yaml
 payload:
   title:
-    $default: "{{receiver}} <- {{sender}}"
+    $default: "{{trans}}"
     $code: "Code {{code}}"
-    $alarm: "{{source}}: {{error}}"
   body:
     $default: "{{text}}\n{{source}} - {{time_str}}"
-    $code: "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}"
-    $alarm: "{{msg}}\n\n{{traceback}}"
+    $code: "{{trans}}\n{{text}}\n{{source}} - {{time_str}}"
 ```
 
 允许的条件 key：
@@ -322,7 +323,6 @@ payload:
 | --- | --- |
 | `$default` | 普通消息或兜底分支。 |
 | `$code` | 识别到验证码时。 |
-| `$alarm` | destination 为 alarm 渲染时。 |
 
 ## 告警
 
@@ -337,11 +337,17 @@ payload:
 ```yaml
 alarm:
   strategy: until_success
-  destinations:
-    - target: bark_phone
-      payload:
-        title: "{{source}}: {{error}}"
-        body: "{{msg}}\n\n{{traceback}}"
+  rules:
+    - name_mark: alerts
+      filters:
+        - type: selector
+          match:
+            error: true
+      destinations:
+        - target: bark_phone
+          payload:
+            title: "{{source}}: {{error}}"
+            body: "{{msg}}\n\n{{traceback}}"
 ```
 
 ## App 保留策略
@@ -430,11 +436,11 @@ target:
     channel: floating
     payload:
       title:
-        $default: "{{receiver}} <- {{sender}}"
+        $default: "{{trans}}"
         $code: "Code {{code}}"
       body:
         $default: "{{text}}\n{{source}} - {{time_str}}"
-        $code: "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}"
+        $code: "{{trans}}\n{{text}}\n{{source}} - {{time_str}}"
       input:
         $default: "{{text}}"
         $code: "{{code}}"
@@ -479,11 +485,17 @@ ipn:
 
 alarm:
   strategy: until_success
-  destinations:
-    - target: bark_phone
-      payload:
-        title: "{{source}}: {{error}}"
-        body: "{{msg}}\n\n{{traceback}}"
+  rules:
+    - name_mark: alerts
+      filters:
+        - type: selector
+          match:
+            error: true
+      destinations:
+        - target: bark_phone
+          payload:
+            title: "{{source}}: {{error}}"
+            body: "{{msg}}\n\n{{traceback}}"
 ```
 
 ## 游标与历史行为

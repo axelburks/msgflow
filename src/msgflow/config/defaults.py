@@ -1,35 +1,29 @@
+TRANS_TITLE = "{{trans}}: {{title}}"
+CODE_TITLE = "🌀 验证码 {{code}}"
+SUBT_BODY_SRC_TIME = "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}"
+MD_SUBT_BODY_SRC_TIME = "{{subtitle}}  \n{{body}}  \n{{source}} - {{time_str}}"
+TRANS_TEXT_SRC_TIME = "{{trans}}\n{{text}}\n{{source}} - {{time_str}}"
+MD_TRANS_TEXT_SRC_TIME = "{{trans}}  \n{{text}}  \n{{source}} - {{time_str}}"
+ALARM_TITLE = "{{source}}: {{error}}"
+ALARM_BODY = "{{msg}}\n\n{{traceback}}"
+MD_ALARM_BODY = "{{msg}}  \n  \n{{traceback}}"
+ALARM_COPY = f"{ALARM_TITLE}\n\n{ALARM_BODY}"
+
 CONFIG_DEFAULTS = {
     "source": "msgflow",
     "check_interval": 1,
     "app": {
         "retention": {
-            "sms": {
-                "mode": "count",
-                "value": 5000,
-            },
-            "notify": {
-                "mode": "days",
-                "value": 30,
-            },
-            "ipn": {
-                "mode": "days",
-                "value": 30,
-            },
+            "sms": {"mode": "count", "value": 5000},
+            "notify": {"mode": "days", "value": 30},
+            "ipn": {"mode": "days", "value": 30},
         },
     },
     "target": {},
-    "sms": {
-        "strategy": "until_success",
-    },
-    "notify": {
-        "strategy": "until_success",
-    },
-    "ipn": {
-        "strategy": "until_success",
-    },
-    "alarm": {
-        "strategy": "until_success",
-    },
+    "sms": {"strategy": "until_success"},
+    "notify": {"strategy": "until_success"},
+    "ipn": {"strategy": "until_success"},
+    "alarm": {"strategy": "until_success"},
     "channel": {
         "webhook": {
             "logmarker": "🌐",
@@ -40,57 +34,19 @@ CONFIG_DEFAULTS = {
             "method": "POST",
             "url": "https://api.day.app/push",
             "payload": {
-                "title": {
-                    "$default": "{{receiver}} <- {{sender}}",
-                    "$code": "🌀 验证码 {{code}}",
-                    "$alarm": "{{source}}: {{error}}",
-                },
-                "body": {
-                    "$default": "{{text}}\n{{source}} - {{time_str}}",
-                    "$code": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}",
-                    "$alarm": "{{msg}}\n\n{{traceback}}"
-                },
-                "copy": {
-                    "$default": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}",
-                    "$code": "{{code}}",
-                    "$alarm": "{{source}}: {{error}}\n\n{{msg}}\n\n{{traceback}}"
-                },
-                "autoCopy": {
-                    "$default": 0,
-                    "$code": 1,
-                    "$alarm": 0
-                },
-                "level": {
-                    "$default": "active",
-                    "$code": "timeSensitive",
-                    "$alarm": "timeSensitive"
-                },
+                "title": {"$default": TRANS_TITLE, "$code": CODE_TITLE},
+                "body": {"$default": SUBT_BODY_SRC_TIME, "$code": TRANS_TEXT_SRC_TIME},
+                "copy": {"$default": TRANS_TEXT_SRC_TIME, "$code": "{{code}}"},
+                "autoCopy": {"$default": 0, "$code": 1},
+                "level": {"$default": "active", "$code": "timeSensitive"},
             },
-            "notify": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                    "copy": {
-                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                },
-            },
-            "ipn": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                    "copy": {
-                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+            "kinds": {
+                "alarm": {
+                    "payload": {
+                        "title": ALARM_TITLE,
+                        "body": ALARM_BODY,
+                        "copy": ALARM_COPY,
+                        "level": "timeSensitive",
                     },
                 },
             },
@@ -100,36 +56,14 @@ CONFIG_DEFAULTS = {
             "method": "POST",
             "url": "https://gateway.pushgo.cn/message",
             "payload": {
-                "title": {
-                    "$default": "{{receiver}} <- {{sender}}",
-                    "$code": "🌀 验证码 {{code}}",
-                    "$alarm": "{{source}}: {{error}}",
-                },
-                "body": {
-                    "$default": "{{text}}  \n{{source}} - {{time_str}}",
-                    "$code": "{{receiver}} <- {{sender}}  \n{{text}}  \n{{source}} - {{time_str}}",
-                    "$alarm": "{{msg}}  \n  \n{{traceback}}"
-                },
+                "title": {"$default": TRANS_TITLE, "$code": CODE_TITLE},
+                "body": {"$default": MD_SUBT_BODY_SRC_TIME, "$code": MD_TRANS_TEXT_SRC_TIME},
             },
-            "notify": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}  \n{{body}}  \n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}  \n{{source}} - {{time_str}}",
-                    },
-                },
-            },
-            "ipn": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}  \n{{body}}  \n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}  \n{{source}} - {{time_str}}",
+            "kinds": {
+                "alarm": {
+                    "payload": {
+                        "title": ALARM_TITLE,
+                        "body": MD_ALARM_BODY,
                     },
                 },
             },
@@ -139,28 +73,16 @@ CONFIG_DEFAULTS = {
             "method": "POST",
             "payload": {
                 "text": {
-                    "$default": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}",
-                    "$code": "🌀 验证码 {{code}}\n{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}",
-                    "$alarm": "{{source}}: {{error}}\n\n{{msg}}\n\n{{traceback}}"
+                    "$default": TRANS_TEXT_SRC_TIME,
+                    "$code": f"{CODE_TITLE}\n{TRANS_TEXT_SRC_TIME}",
                 },
                 "parse_mode": "HTML",
-                "link_preview_options": {
-                    "is_disabled": True
-                }
+                "link_preview_options": {"is_disabled": True},
             },
-            "notify": {
-                "payload": {
-                    "text": {
-                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                        "$code": "🌀 验证码 {{code}}\n{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                },
-            },
-            "ipn": {
-                "payload": {
-                    "text": {
-                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                        "$code": "🌀 验证码 {{code}}\n{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
+            "kinds": {
+                "alarm": {
+                    "payload": {
+                        "text": ALARM_COPY,
                     },
                 },
             },
@@ -170,130 +92,50 @@ CONFIG_DEFAULTS = {
             "method": "POST",
             "payload": {
                 "$default": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"blue\",\"title\":{\"content\":\"{{receiver}} <- {{sender}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{text}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}}",
-                "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"{{receiver}} <- {{sender}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"验证码\\n{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{text}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}",
-                "$alarm": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"red\",\"title\":{\"content\":\"{{source}}: {{error}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{msg}}\\n\\n{{traceback}}\",\"tag\":\"lark_md\"}}]}}"
+                "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"🌀 验证码 {{code}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{receiver}} <- {{sender}}\\n{{text}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}"
             },
-            "success_json": {
-                "code": 0,
-            },
-            "notify": {
-                "payload": {
-                    "$default": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"blue\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}}",
-                    "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"验证码\\n{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}",
-                },
-            },
-            "ipn": {
-                "payload": {
-                    "$default": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"blue\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}}",
-                    "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"{{receiver}}: {{title}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"验证码\\n{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{subtitle}}\\n{{body}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}",
+            "success_json": {"code": 0},
+            "kinds": {
+                "alarm": {
+                    "payload": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"red\",\"title\":{\"content\":\"{{source}}: {{error}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{msg}}\\n\\n{{traceback}}\",\"tag\":\"lark_md\"}}]}}",
                 },
             },
         },
         "notification": {
             "logmarker": "🔔",
             "payload": {
-                "title": {
-                    "$default": "{{receiver}} <- {{sender}}",
-                    "$code": "🌀 验证码 {{code}}",
-                    "$alarm": "{{source}}: {{error}}",
-                },
-                "body": {
-                    "$default": "{{text}}\n{{source}} - {{time_str}}",
-                    "$code": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}",
-                    "$alarm": "{{msg}}\n\n{{traceback}}"
-                },
-                "copy": {
-                    "$default": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}",
-                    "$code": "{{code}}",
-                    "$alarm": "{{source}}: {{error}}\n\n{{msg}}\n\n{{traceback}}",
-                },
-                "autoCopy": {
-                    "$default": 0,
-                    "$code": 1,
-                    "$alarm": 0
-                }
+                "title": {"$default": TRANS_TITLE, "$code": CODE_TITLE},
+                "body": {"$default": SUBT_BODY_SRC_TIME, "$code": TRANS_TEXT_SRC_TIME},
+                "copy": {"$default": TRANS_TEXT_SRC_TIME, "$code": "{{code}}"},
+                "autoCopy": {"$default": 0, "$code": 1},
             },
-            "notify": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                    "copy": {
-                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                },
-            },
-            "ipn": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                    "copy": {
-                        "$default": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                },
-            },
-        }
-        ,
-        "floating": {
-            "logmarker": "🔖",
-            "payload": {
-                "title": {
-                    "$default": "{{receiver}} <- {{sender}}",
-                    "$code": "🌀 验证码 {{code}}",
-                    "$alarm": "{{source}}: {{error}}",
-                },
-                "body": {
-                    "$default": "{{text}}\n{{source}} - {{time_str}}",
-                    "$code": "{{receiver}} <- {{sender}}\n{{text}}\n{{source}} - {{time_str}}",
-                    "$alarm": "{{msg}}\n\n{{traceback}}",
-                },
-                "input": {
-                    "$default": "{{text}}",
-                    "$code": "{{code}}",
-                    "$alarm": "{{msg}}",
-                },
-            },
-            "notify": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                    "input": {
-                        "$default": "{{text}}",
-                        "$code": "{{code}}",
-                    },
-                },
-            },
-            "ipn": {
-                "payload": {
-                    "title": {
-                        "$default": "{{receiver}}: {{title}}",
-                    },
-                    "body": {
-                        "$default": "{{subtitle}}\n{{body}}\n{{source}} - {{time_str}}",
-                        "$code": "{{receiver}}: {{text}}\n{{source}} - {{time_str}}",
-                    },
-                    "input": {
-                        "$default": "{{text}}",
-                        "$code": "{{code}}",
+            "kinds": {
+                "alarm": {
+                    "payload": {
+                        "title": ALARM_TITLE,
+                        "body": ALARM_BODY,
                     },
                 },
             },
         },
-    }
+        "floating": {
+            "logmarker": "🔖",
+            "payload": {
+                "title": {"$default": TRANS_TITLE, "$code": CODE_TITLE},
+                "body": {"$default": SUBT_BODY_SRC_TIME, "$code": TRANS_TEXT_SRC_TIME},
+                "input": {"$default": "{{text}}", "$code": "{{code}}"},
+            },
+            "kinds": {
+                "alarm": {
+                    "payload": {
+                        "title": ALARM_TITLE,
+                        "body": ALARM_BODY,
+                        "input": ALARM_COPY,
+                    },
+                },
+            },
+        },
+    },
 }
 
 
@@ -301,7 +143,7 @@ CONFIG_TEMPLATE = """# msgflow runtime config
 # Active fields below are the minimal valid config and also show example config.
 # Commented blocks are examples. Uncomment and edit them to override defaults.
 # Defaults not shown here are still merged from the built-in config.
-# Config Priority: channel.<channel> < target.<name> < rule.destinations[]
+# Config Priority: channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
 
 source: msgflow        # default: msgflow
 check_interval: 1     # default: 1 second
@@ -327,7 +169,7 @@ check_interval: 1     # default: 1 second
 #     url: https://api.day.app/push  # default: https://api.day.app/push
 #     payload:
 #       title:
-#         $default: "{{receiver}} <- {{sender}}"
+#         $default: "{{trans}}"
 #         $code: "🌀 验证码 {{code}}"
 #       body:
 #         $default: "{{text}}\\n{{source}} - {{time_str}}"
@@ -338,7 +180,7 @@ check_interval: 1     # default: 1 second
 #     method: POST          # default: POST
 #     payload:
 #       chat_id: "123456"
-#       text: "{{receiver}} <- {{sender}}\\n{{text}}"
+#       text: "{{trans}}\\n{{text}}"
 #       parse_mode: HTML
 
 # target:             # configure credentials/URLs here
@@ -349,7 +191,7 @@ check_interval: 1     # default: 1 second
 #       Authorization: Bearer token
 #     params: {}
 #     payload:
-#       title: "{{receiver}} <- {{sender}}"
+#       title: "{{trans}}"
 #       body: "{{text}}"
 #     timeout: 10
 #     success_json:
@@ -420,8 +262,14 @@ check_interval: 1     # default: 1 second
 #
 # alarm:
 #   strategy: until_success   # default: until_success; options: all | until_success
-#   destinations:          # default: []
-#     - target: pushgo_alarm
-#     - target: tgbot_debug_bot
+#   rules:                 # default: []
+#     - name_mark: runtime_error
+#       filters:
+#         - type: selector
+#           match:
+#             error: true
+#       destinations:
+#         - target: pushgo_alarm
+#         - target: tgbot_debug_bot
 
 """

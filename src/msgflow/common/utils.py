@@ -16,6 +16,7 @@ MAC_EPOCH_OFFSET = 978307200
 _APP_NAME_CACHE: dict[str, str] = {}
 _APP_NAME_MISS: dict[str, float] = {}
 _APP_NAME_MISS_TTL = 300
+_APP_NAME_MDFIND_TIMEOUT = 5
 
 
 def get_app_name(bundle_id: Optional[str]) -> Optional[str]:
@@ -50,17 +51,19 @@ def _app_path_from_mdfind(bundle_id: str) -> Optional[str]:
     try:
         result = subprocess.run(
             ['mdfind', f'kMDItemCFBundleIdentifier == "{bundle_id}"'],
-            capture_output=True, text=True, timeout=2
+            capture_output=True, text=True, timeout=_APP_NAME_MDFIND_TIMEOUT
         )
         out = result.stdout.strip().splitlines()
         if out:
             return out[0]
         logger.warning(
-            f"⚠️ mdfind returned empty for '{bundle_id}' "
-            f"(rc={result.returncode}, stderr={result.stderr!r})"
+            "mdfind returned empty for %r (rc=%s, stderr=%r)",
+            bundle_id,
+            result.returncode,
+            result.stderr,
         )
     except Exception as e:
-        logger.error(f"❌ get app name for '{bundle_id}' error: {e}")
+        logger.warning("get app name for %r error: %s", bundle_id, e)
     return None
 
 
@@ -109,6 +112,11 @@ def try_parse_json(value: Any) -> Any:
 def build_message_text(msg: dict[str, Any]) -> str:
     parts = [msg.get('title'), msg.get('subtitle'), msg.get('body')]
     return "\n".join(str(part) for part in parts if part)
+
+
+def build_message_trans(msg: dict[str, Any]) -> str:
+    parts = [msg.get('sender'), msg.get('receiver')]
+    return " <- ".join(str(part) for part in parts if part)
 
 
 def get_code_from_text(text: Optional[str]) -> Optional[str]:
