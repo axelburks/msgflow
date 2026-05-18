@@ -1,0 +1,128 @@
+src/msgflow/service/flows/ipn_store.py
+  f661c2e9bf698ced 240 gitai:{"mixed_line_ranges":[{"Single":240}],"operations":[]}
+src/msgflow/service/history.py
+  ee366758ef0bb79e 177
+  4fe137031273334b 103
+src/msgflow/service/replay.py
+  3fdd4509e85fc60e 1
+  4f170881dbe56f69 38
+src/msgflow/config/__init__.py
+  3ea6bdfe72042be9 96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "159a9a64320135024f6a8b75d1007ef05030097d",
+  "prompts": {
+    "3ea6bdfe72042be9": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-a72b538f-cc0b-49e7-9ac9-d414de7c22bc",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "3fdd4509e85fc60e": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-c8f7fe39-ceb3-4fad-9ba7-d21a20b16d5c",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "4c5cf500a65d75ec": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-19b0e11f-8892-409b-bc5e-dfa19bbc2ba2",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "4f170881dbe56f69": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-06337dcd-640b-490d-bc5f-e1e4a402c184",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "4fe137031273334b": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-a0aca402-1868-492d-a0ce-fafc937f273c",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "ee366758ef0bb79e": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-13e546b9-8e50-4518-bcf3-b5f6a0889eae",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "f661c2e9bf698ced": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-333fd82a-cf35-4f10-ab6a-898a89da76f9",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 1
+    }
+  },
+  "attestation_metadata": {
+    "src/msgflow/service/flows/ipn_store.py": [
+      {
+        "hash": "f661c2e9bf698ced",
+        "line_ranges": [
+          {
+            "Single": 240
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 240
+          }
+        ],
+        "operations": []
+      }
+    ]
+  },
+  "remote_transcripts": {}
+}
