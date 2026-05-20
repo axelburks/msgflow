@@ -1,0 +1,171 @@
+tests/test_utils.py
+  19c2c61a464a2a75 128-165
+src/msgflow/common/utils.py
+  19c2c61a464a2a75 1,151-185
+README.zh-CN.md
+  382fd6b0e8e3cf42 223
+  e5494f551542c2f8 221
+src/msgflow/service/flows/base.py
+  19c2c61a464a2a75 7,60-65,67-70,80,92-99,103,107,181,201,219-221,226,285-289,344,453-454,482,596-603
+src/msgflow/core.py
+  19c2c61a464a2a75 18,23,28,75
+src/msgflow/common/templating.py
+  19c2c61a464a2a75 13-27,45,56-61,63-69,80-137,236-244,246
+src/msgflow/service/runtime.py
+  5d8b9ce212815c98 58-59
+  19c2c61a464a2a75 22,26,30,53,57,279,299
+src/msgflow/config/__init__.py
+  19c2c61a464a2a75 22,25,51,58,90-110,263-264,267-269,271-280,283-297,299-300,303-304,307,309-310,313,315-320,330-334,340,492-493
+  e0c3183dd230c4e1 494
+  c765d71b6d3b3aee 329
+  499f4ce4ad2e3455 122
+  68c71b7f9d6b1018 486
+src/msgflow/config/defaults.py
+  19c2c61a464a2a75 14-19,88-159,164-188,233-236,240-254,266-272,318-321,323,333-337,348,356,358-360
+tests/test_alarm.py
+  19c2c61a464a2a75 11
+tests/test_runtime.py
+  19c2c61a464a2a75 45-52,102,134-145,187-189
+README.md
+  b8e00cad13726b28 223
+  fd202174b05de378 221-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "0a423b5421922865df8376464777231c0dc6a796",
+  "prompts": {
+    "19c2c61a464a2a75": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a0b106a23684b6d4b39f267",
+        "model": "glm-5.1__dev"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 791,
+      "total_deletions": 391,
+      "accepted_lines": 473,
+      "overriden_lines": 0
+    },
+    "382fd6b0e8e3cf42": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-219c7b57-2a8d-4af1-8de9-f0221068a05d",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "499f4ce4ad2e3455": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-56510290-4f8a-4a31-85a1-0aa6b0920583",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "5d8b9ce212815c98": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-52dc91e2-8e2d-4a87-808d-142d5c2e9196",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 1,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "68c71b7f9d6b1018": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-40432652-57cb-42cc-8970-9d642aef6a35",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "b8e00cad13726b28": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-93b44da0-f605-48a5-9b43-12f6f8860fb9",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "c765d71b6d3b3aee": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-e9f54c10-147c-462b-a1c6-e4c3e07a2317",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "e0c3183dd230c4e1": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-73cf7f61-d26c-4b20-8a55-da78a86a19ae",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "e5494f551542c2f8": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-b074bb3d-628a-4227-87a1-fb859715fc72",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "fd202174b05de378": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-e7bda9b9-7291-4d4e-b80c-bbaabb178aa5",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 1,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
