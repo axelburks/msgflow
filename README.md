@@ -2,7 +2,7 @@
 
 [简体中文](./README.zh-CN.md) | English
 
-MsgFlow is a macOS message forwarding app. It listens for SMS and notification messages received on your device, forwards them to Bark, Telegram, Lark, PushGo, webhooks, macOS notifications, or floating panels, and supports rule matching plus template rendering.
+MsgFlow is a macOS message forwarding app. It listens for SMS, macOS notification, and iPhone mirrored notifications, forwards them to Bark, Telegram, Lark, PushGo, webhooks, macOS notifications, or floating panels, and supports rule matching plus template rendering.
 
 ## Highlights
 
@@ -36,7 +36,7 @@ brew install axelburks/tap/msgflow-app
 Upgrade:
 
 ```bash
-brew upgrade msgflow-app
+brew update && brew upgrade msgflow-app
 ```
 
 Open `msgflow.app`, grant the requested permissions, then open the config folder from the menu bar item.
@@ -59,7 +59,7 @@ brew install axelburks/tap/msgflow
 Upgrade:
 
 ```bash
-brew update && brew upgrade msgflow-app
+brew update && brew upgrade msgflow
 ```
 
 Start the background service:

@@ -2,7 +2,7 @@
 
 简体中文 | [English](./README.md)
 
-MsgFlow 是一个 macOS 消息转发 App。它会监听设备收到的短信和通知消息，并支持转发到 Bark、Telegram、飞书、PushGo、Webhook、macOS 通知或显示浮窗，同时支持规则匹配和模板渲染。
+MsgFlow 是一个 macOS 消息转发 App。它会监听短信、macOS 通知消息、iPhone 镜像通知，并支持转发到 Bark、Telegram、飞书、PushGo、Webhook、macOS 通知或显示浮窗，同时支持规则匹配和模板渲染。
 
 ## 主要特性
 
@@ -59,7 +59,7 @@ brew install axelburks/tap/msgflow
 升级：
 
 ```bash
-brew upgrade msgflow
+brew update && brew upgrade msgflow
 ```
 
 启动后台服务：
