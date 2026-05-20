@@ -1,0 +1,1322 @@
+src/msgflow/config/defaults.py
+  19c2c61a464a2a75 14-19,88-159,164-188,233-236,240-254,266-272,318-321,323,333-337,348,356,358-360 gitai:{"mixed_line_ranges":[{"Single":14},{"Single":17},{"Range":[335,336]}],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Range":[14,19]},{"Range":[88,159]},{"Range":[164,188]},{"Range":[233,236]},{"Range":[240,254]},{"Range":[266,272]},{"Range":[318,321]},{"Single":323},{"Range":[333,337]},{"Single":348},{"Single":356},{"Range":[358,360]}]}]}
+src/msgflow/config/__init__.py
+  499f4ce4ad2e3455 122 gitai:{"mixed_line_ranges":[{"Single":122}],"operations":[]}
+  19c2c61a464a2a75 22,25,51,58,90-110,263-264,267-269,271-280,283-297,299-300,303-304,307,309-310,313,315-320,330-334,340,492-493 gitai:{"mixed_line_ranges":[{"Single":263},{"Single":267},{"Single":271},{"Single":275},{"Single":283},{"Range":[287,288]},{"Single":291},{"Single":297},{"Single":299},{"Single":304},{"Single":307},{"Single":313},{"Single":316},{"Single":320},{"Range":[330,334]},{"Single":340}],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":22},{"Single":25},{"Single":51},{"Single":58},{"Range":[90,110]},{"Range":[263,264]},{"Range":[267,269]},{"Range":[271,280]},{"Range":[283,297]},{"Range":[299,300]},{"Range":[303,304]},{"Single":307},{"Range":[309,310]},{"Single":313},{"Range":[315,320]},{"Range":[330,334]},{"Single":340},{"Range":[492,493]}]}]}
+  68c71b7f9d6b1018 486 gitai:{"mixed_line_ranges":[{"Single":486}],"operations":[]}
+  c765d71b6d3b3aee 329
+  e0c3183dd230c4e1 494
+tests/test_alarm.py
+  19c2c61a464a2a75 11 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":11}]}]}
+tests/test_runtime.py
+  19c2c61a464a2a75 45-52,102,134-145,187-189 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Range":[45,52]},{"Single":102},{"Range":[134,145]},{"Range":[187,189]}]}]}
+tests/test_utils.py
+  19c2c61a464a2a75 128-165 gitai:{"mixed_line_ranges":[{"Single":162}],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Range":[128,165]}]}]}
+src/msgflow/service/flows/base.py
+  19c2c61a464a2a75 7,60-65,67-70,80,92-99,103,107,181,201,219-221,226,285-289,344,453-454,482,596-603 gitai:{"mixed_line_ranges":[{"Single":7},{"Single":61},{"Range":[64,65]},{"Range":[67,70]}],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":7},{"Range":[60,65]},{"Range":[67,70]},{"Single":80},{"Range":[92,99]},{"Single":103},{"Single":107},{"Single":181},{"Single":201},{"Range":[219,221]},{"Single":226},{"Range":[285,289]},{"Single":344},{"Range":[453,454]},{"Single":482},{"Range":[596,603]}]}]}
+src/msgflow/common/templating.py
+  19c2c61a464a2a75 13-27,45,56-61,63-69,80-137,236-244,246 gitai:{"mixed_line_ranges":[{"Single":241},{"Range":[243,244]}],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Range":[13,27]},{"Single":45},{"Range":[56,61]},{"Range":[63,69]},{"Range":[80,137]},{"Range":[236,244]},{"Single":246}]}]}
+src/msgflow/service/runtime.py
+  19c2c61a464a2a75 22,26,30,53,57,279,299 gitai:{"mixed_line_ranges":[{"Single":57}],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":22},{"Single":26},{"Single":30},{"Single":53},{"Single":57},{"Single":279},{"Single":299}]}]}
+  5d8b9ce212815c98 58-59 gitai:{"mixed_line_ranges":[{"Single":59}],"operations":[]}
+README.zh-CN.md
+  382fd6b0e8e3cf42 223
+  e5494f551542c2f8 221 gitai:{"mixed_line_ranges":[{"Single":221}],"operations":[]}
+README.md
+  b8e00cad13726b28 223
+  fd202174b05de378 221-222 gitai:{"mixed_line_ranges":[{"Range":[221,222]}],"operations":[]}
+src/msgflow/common/utils.py
+  19c2c61a464a2a75 1,151-185 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":1},{"Range":[151,185]}]}]}
+src/msgflow/core.py
+  19c2c61a464a2a75 18,23,28,75 gitai:{"mixed_line_ranges":[{"Single":18},{"Single":23},{"Single":28},{"Single":75}],"operations":[{"operation_id":"6a0c141f6f71ae4544c30c65","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":18},{"Single":23},{"Single":28},{"Single":75}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c74ea89f4940d775299da5d881a54f3decc28181",
+  "prompts": {
+    "046589dba99fb9db": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-235afb92-77d4-484e-8646-362ed8e4d103",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 1
+    },
+    "19c2c61a464a2a75": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a0b106a23684b6d4b39f267",
+        "model": "glm-5.1__dev"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 791,
+      "total_deletions": 391,
+      "accepted_lines": 228,
+      "overriden_lines": 52
+    },
+    "2ff44d53aa9690ae": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-b5163f33-6ee4-4b0e-b675-6d8a0643d811",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "382fd6b0e8e3cf42": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-219c7b57-2a8d-4af1-8de9-f0221068a05d",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "499f4ce4ad2e3455": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-56510290-4f8a-4a31-85a1-0aa6b0920583",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 1
+    },
+    "51d5839925682e62": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-07d580d2-d61a-4620-90ef-ffc6dd58d5f5",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "51dfa8c2b18d7b37": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-2d4da660-960d-4309-a63c-6f8ab2ee6384",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 1
+    },
+    "5d8b9ce212815c98": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-52dc91e2-8e2d-4a87-808d-142d5c2e9196",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 1
+    },
+    "68c71b7f9d6b1018": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-40432652-57cb-42cc-8970-9d642aef6a35",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 1
+    },
+    "b339c2813140eb21": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-2e95fb84-84b2-417b-9c4c-2c66c6f568c2",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "b8e00cad13726b28": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-93b44da0-f605-48a5-9b43-12f6f8860fb9",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "c765d71b6d3b3aee": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-e9f54c10-147c-462b-a1c6-e4c3e07a2317",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "c7f12a3ba42a44ec": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-0ae9c3da-f92d-4fc6-8f85-e1d773d053e8",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "d9aca1599a1289b9": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-2feee272-fa1d-4514-972f-d8342d23d28c",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "e0c3183dd230c4e1": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-73cf7f61-d26c-4b20-8a55-da78a86a19ae",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "e5494f551542c2f8": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-b074bb3d-628a-4227-87a1-fb859715fc72",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 1
+    },
+    "e58caac1812c7555": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-53438911-ee31-4153-add5-834c59f8bb50",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 1
+    },
+    "edb0742eb6a217c0": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-07d2b7cc-a683-437e-abbb-cf21879c0b98",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "fd202174b05de378": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-e7bda9b9-7291-4d4e-b80c-bbaabb178aa5",
+        "model": "default"
+      },
+      "human_author": "axelburks <axel.burks@gmail.com>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 2
+    }
+  },
+  "attestation_metadata": {
+    "README.md": [
+      {
+        "hash": "fd202174b05de378",
+        "line_ranges": [
+          {
+            "Range": [
+              221,
+              222
+            ]
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Range": [
+              221,
+              222
+            ]
+          }
+        ],
+        "operations": []
+      }
+    ],
+    "README.zh-CN.md": [
+      {
+        "hash": "e5494f551542c2f8",
+        "line_ranges": [
+          {
+            "Single": 221
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 221
+          }
+        ],
+        "operations": []
+      }
+    ],
+    "src/msgflow/common/templating.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Range": [
+              13,
+              27
+            ]
+          },
+          {
+            "Single": 45
+          },
+          {
+            "Range": [
+              56,
+              61
+            ]
+          },
+          {
+            "Range": [
+              63,
+              69
+            ]
+          },
+          {
+            "Range": [
+              80,
+              137
+            ]
+          },
+          {
+            "Range": [
+              236,
+              244
+            ]
+          },
+          {
+            "Single": 246
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 241
+          },
+          {
+            "Range": [
+              243,
+              244
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Range": [
+                  13,
+                  27
+                ]
+              },
+              {
+                "Single": 45
+              },
+              {
+                "Range": [
+                  56,
+                  61
+                ]
+              },
+              {
+                "Range": [
+                  63,
+                  69
+                ]
+              },
+              {
+                "Range": [
+                  80,
+                  137
+                ]
+              },
+              {
+                "Range": [
+                  236,
+                  244
+                ]
+              },
+              {
+                "Single": 246
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "src/msgflow/common/utils.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Single": 1
+          },
+          {
+            "Range": [
+              151,
+              185
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 1
+              },
+              {
+                "Range": [
+                  151,
+                  185
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "src/msgflow/config/__init__.py": [
+      {
+        "hash": "499f4ce4ad2e3455",
+        "line_ranges": [
+          {
+            "Single": 122
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 122
+          }
+        ],
+        "operations": []
+      },
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Single": 22
+          },
+          {
+            "Single": 25
+          },
+          {
+            "Single": 51
+          },
+          {
+            "Single": 58
+          },
+          {
+            "Range": [
+              90,
+              110
+            ]
+          },
+          {
+            "Range": [
+              263,
+              264
+            ]
+          },
+          {
+            "Range": [
+              267,
+              269
+            ]
+          },
+          {
+            "Range": [
+              271,
+              280
+            ]
+          },
+          {
+            "Range": [
+              283,
+              297
+            ]
+          },
+          {
+            "Range": [
+              299,
+              300
+            ]
+          },
+          {
+            "Range": [
+              303,
+              304
+            ]
+          },
+          {
+            "Single": 307
+          },
+          {
+            "Range": [
+              309,
+              310
+            ]
+          },
+          {
+            "Single": 313
+          },
+          {
+            "Range": [
+              315,
+              320
+            ]
+          },
+          {
+            "Range": [
+              330,
+              334
+            ]
+          },
+          {
+            "Single": 340
+          },
+          {
+            "Range": [
+              492,
+              493
+            ]
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 263
+          },
+          {
+            "Single": 267
+          },
+          {
+            "Single": 271
+          },
+          {
+            "Single": 275
+          },
+          {
+            "Single": 283
+          },
+          {
+            "Range": [
+              287,
+              288
+            ]
+          },
+          {
+            "Single": 291
+          },
+          {
+            "Single": 297
+          },
+          {
+            "Single": 299
+          },
+          {
+            "Single": 304
+          },
+          {
+            "Single": 307
+          },
+          {
+            "Single": 313
+          },
+          {
+            "Single": 316
+          },
+          {
+            "Single": 320
+          },
+          {
+            "Range": [
+              330,
+              334
+            ]
+          },
+          {
+            "Single": 340
+          }
+        ],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 22
+              },
+              {
+                "Single": 25
+              },
+              {
+                "Single": 51
+              },
+              {
+                "Single": 58
+              },
+              {
+                "Range": [
+                  90,
+                  110
+                ]
+              },
+              {
+                "Range": [
+                  263,
+                  264
+                ]
+              },
+              {
+                "Range": [
+                  267,
+                  269
+                ]
+              },
+              {
+                "Range": [
+                  271,
+                  280
+                ]
+              },
+              {
+                "Range": [
+                  283,
+                  297
+                ]
+              },
+              {
+                "Range": [
+                  299,
+                  300
+                ]
+              },
+              {
+                "Range": [
+                  303,
+                  304
+                ]
+              },
+              {
+                "Single": 307
+              },
+              {
+                "Range": [
+                  309,
+                  310
+                ]
+              },
+              {
+                "Single": 313
+              },
+              {
+                "Range": [
+                  315,
+                  320
+                ]
+              },
+              {
+                "Range": [
+                  330,
+                  334
+                ]
+              },
+              {
+                "Single": 340
+              },
+              {
+                "Range": [
+                  492,
+                  493
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "68c71b7f9d6b1018",
+        "line_ranges": [
+          {
+            "Single": 486
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 486
+          }
+        ],
+        "operations": []
+      }
+    ],
+    "src/msgflow/config/defaults.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Range": [
+              14,
+              19
+            ]
+          },
+          {
+            "Range": [
+              88,
+              159
+            ]
+          },
+          {
+            "Range": [
+              164,
+              188
+            ]
+          },
+          {
+            "Range": [
+              233,
+              236
+            ]
+          },
+          {
+            "Range": [
+              240,
+              254
+            ]
+          },
+          {
+            "Range": [
+              266,
+              272
+            ]
+          },
+          {
+            "Range": [
+              318,
+              321
+            ]
+          },
+          {
+            "Single": 323
+          },
+          {
+            "Range": [
+              333,
+              337
+            ]
+          },
+          {
+            "Single": 348
+          },
+          {
+            "Single": 356
+          },
+          {
+            "Range": [
+              358,
+              360
+            ]
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 14
+          },
+          {
+            "Single": 17
+          },
+          {
+            "Range": [
+              335,
+              336
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Range": [
+                  14,
+                  19
+                ]
+              },
+              {
+                "Range": [
+                  88,
+                  159
+                ]
+              },
+              {
+                "Range": [
+                  164,
+                  188
+                ]
+              },
+              {
+                "Range": [
+                  233,
+                  236
+                ]
+              },
+              {
+                "Range": [
+                  240,
+                  254
+                ]
+              },
+              {
+                "Range": [
+                  266,
+                  272
+                ]
+              },
+              {
+                "Range": [
+                  318,
+                  321
+                ]
+              },
+              {
+                "Single": 323
+              },
+              {
+                "Range": [
+                  333,
+                  337
+                ]
+              },
+              {
+                "Single": 348
+              },
+              {
+                "Single": 356
+              },
+              {
+                "Range": [
+                  358,
+                  360
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "src/msgflow/core.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Single": 18
+          },
+          {
+            "Single": 23
+          },
+          {
+            "Single": 28
+          },
+          {
+            "Single": 75
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 18
+          },
+          {
+            "Single": 23
+          },
+          {
+            "Single": 28
+          },
+          {
+            "Single": 75
+          }
+        ],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 18
+              },
+              {
+                "Single": 23
+              },
+              {
+                "Single": 28
+              },
+              {
+                "Single": 75
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "src/msgflow/service/flows/base.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Single": 7
+          },
+          {
+            "Range": [
+              60,
+              65
+            ]
+          },
+          {
+            "Range": [
+              67,
+              70
+            ]
+          },
+          {
+            "Single": 80
+          },
+          {
+            "Range": [
+              92,
+              99
+            ]
+          },
+          {
+            "Single": 103
+          },
+          {
+            "Single": 107
+          },
+          {
+            "Single": 181
+          },
+          {
+            "Single": 201
+          },
+          {
+            "Range": [
+              219,
+              221
+            ]
+          },
+          {
+            "Single": 226
+          },
+          {
+            "Range": [
+              285,
+              289
+            ]
+          },
+          {
+            "Single": 344
+          },
+          {
+            "Range": [
+              453,
+              454
+            ]
+          },
+          {
+            "Single": 482
+          },
+          {
+            "Range": [
+              596,
+              603
+            ]
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 7
+          },
+          {
+            "Single": 61
+          },
+          {
+            "Range": [
+              64,
+              65
+            ]
+          },
+          {
+            "Range": [
+              67,
+              70
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 7
+              },
+              {
+                "Range": [
+                  60,
+                  65
+                ]
+              },
+              {
+                "Range": [
+                  67,
+                  70
+                ]
+              },
+              {
+                "Single": 80
+              },
+              {
+                "Range": [
+                  92,
+                  99
+                ]
+              },
+              {
+                "Single": 103
+              },
+              {
+                "Single": 107
+              },
+              {
+                "Single": 181
+              },
+              {
+                "Single": 201
+              },
+              {
+                "Range": [
+                  219,
+                  221
+                ]
+              },
+              {
+                "Single": 226
+              },
+              {
+                "Range": [
+                  285,
+                  289
+                ]
+              },
+              {
+                "Single": 344
+              },
+              {
+                "Range": [
+                  453,
+                  454
+                ]
+              },
+              {
+                "Single": 482
+              },
+              {
+                "Range": [
+                  596,
+                  603
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "src/msgflow/service/runtime.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Single": 22
+          },
+          {
+            "Single": 26
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Single": 53
+          },
+          {
+            "Single": 57
+          },
+          {
+            "Single": 279
+          },
+          {
+            "Single": 299
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 57
+          }
+        ],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 22
+              },
+              {
+                "Single": 26
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Single": 53
+              },
+              {
+                "Single": 57
+              },
+              {
+                "Single": 279
+              },
+              {
+                "Single": 299
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "5d8b9ce212815c98",
+        "line_ranges": [
+          {
+            "Range": [
+              58,
+              59
+            ]
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 59
+          }
+        ],
+        "operations": []
+      }
+    ],
+    "tests/test_alarm.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Single": 11
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 11
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "tests/test_runtime.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Range": [
+              45,
+              52
+            ]
+          },
+          {
+            "Single": 102
+          },
+          {
+            "Range": [
+              134,
+              145
+            ]
+          },
+          {
+            "Range": [
+              187,
+              189
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Range": [
+                  45,
+                  52
+                ]
+              },
+              {
+                "Single": 102
+              },
+              {
+                "Range": [
+                  134,
+                  145
+                ]
+              },
+              {
+                "Range": [
+                  187,
+                  189
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "tests/test_utils.py": [
+      {
+        "hash": "19c2c61a464a2a75",
+        "line_ranges": [
+          {
+            "Range": [
+              128,
+              165
+            ]
+          }
+        ],
+        "mixed_line_ranges": [
+          {
+            "Single": 162
+          }
+        ],
+        "operations": [
+          {
+            "operation_id": "6a0c141f6f71ae4544c30c65",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Range": [
+                  128,
+                  165
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "19c2c61a464a2a75": {
+      "tool": "trae",
+      "conversation_id": "6a0b106a23684b6d4b39f267",
+      "session_id": "6a0b106a23684b6d4b39f267",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
