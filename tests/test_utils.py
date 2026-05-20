@@ -126,3 +126,40 @@ def test_get_app_name_retries_after_negative_cache_ttl(monkeypatch):
     monkeypatch.setattr(utils, "_app_path_from_mdfind", lambda _bundle_id: "/Applications/NowFound.app")
 
     assert utils.get_app_name("com.example.old") == "NowFound"
+
+
+def test_extract_code_uses_first_matching_rule_with_default_whole_match():
+    cfg = {
+        "fallback_to_builtin": False,
+        "rules": [
+            {"pattern": r"NOPE-\d+"},
+            {"pattern": r"OTP-\d+"},
+        ],
+    }
+    assert utils.extract_code("Your OTP-1234 is here", cfg) == "OTP-1234"
+
+
+def test_extract_code_supports_int_and_named_groups_and_inline_flags():
+    cfg = {
+        "rules": [
+            {"pattern": r"(?i)code[:：]\s*(?P<c>\d{4,8})", "group": "c"},
+            {"pattern": r"(\d{6})", "group": 1},
+        ],
+    }
+    assert utils.extract_code("CODE: 246810 trailing", cfg) == "246810"
+
+
+def test_extract_code_falls_back_to_builtin_when_enabled():
+    cfg = {"fallback_to_builtin": True, "rules": [{"pattern": r"NEVER"}]}
+    assert utils.extract_code("您的验证码是 246810，请勿泄露", cfg) == "246810"
+
+
+def test_extract_code_returns_none_when_no_match_and_no_fallback():
+    cfg = {"fallback_to_builtin": False, "rules": [{"pattern": r"NEVER"}]}
+    assert utils.extract_code("您的验证码是 246810，请勿泄露", cfg) is None
+
+
+# def test_extract_code_handles_empty_text_and_empty_cfg():
+    assert utils.extract_code("", {"rules": [{"pattern": r"\d+"}]}) is None
+    assert utils.extract_code("hello 123", None) is None
+

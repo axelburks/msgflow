@@ -6,8 +6,9 @@ import threading
 import time
 from typing import Any, Optional
 
+from ..common.templating import refresh_derived_mapping_fields
 from ..common.record_query import build_query_sql
-from ..common.utils import build_message_text, format_ts
+from ..common.utils import format_ts
 
 
 def _sqlite_regexp(pattern: Any, value: Any) -> int:
@@ -287,7 +288,10 @@ class HistoryStore(object):
         total = int(total_row["cnt"]) if total_row else 0
         items = []
         for row in rows:
-            text_preview = build_message_text(dict(row))
+            derived_fields = refresh_derived_mapping_fields(dict(row))
+            text = derived_fields["text"]
+            trans = derived_fields["trans"]
+            text_preview = text.replace("\n", " ").strip()
             items.append(
                 {
                     "run_id": row["run_id"],
@@ -300,7 +304,8 @@ class HistoryStore(object):
                     "cursor_value": row["cursor_value"],
                     "sender": row["sender"],
                     "receiver": row["receiver"],
-                    "text_preview": text_preview[:120],
+                    "trans": trans,
+                    "text_preview": text_preview,
                     "time_str": row["time_str"] or "",
                     "code": row["code"],
                     "matched_rule_count": row["matched_rule_count"],

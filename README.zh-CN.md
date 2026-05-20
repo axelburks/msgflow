@@ -6,8 +6,8 @@ MsgFlow 是一个 macOS 消息转发 App。它会监听设备收到的短信和�
 
 ## 主要特性
 
-- **多消息源**：读取 `~/Library/Messages/chat.db` 中的短信/iMessage、`~/Library/Group Containers/group.com.apple.usernoted/db2/db` 中的 macOS 通知记录，以及 `~/Library/Group Containers/group.com.apple.UserNotifications/Library/UserNotifications/Remote/default` 中的 iPhone 镜像通知。
-- **验证码识别**：支持中文简体、中文繁体和英文验证码识别，并可为验证码单独渲染模板。
+- **多消息源**：支持监听短信、macOS 通知消息、iPhone 镜像通知。
+- **验证码识别与字段改写**：支持中文简体、中文繁体和英文验证码识别，支持自定义正则提取验证码。
 - **规则化转发**：通过 `and`、`or`、`selector` 过滤器，按正则和消息字段路由到不同目标。
 - **多通道投递**：支持 `bark`、`tgbot`、`pushgo`、`lark`、`webhook`、`notification`、`floating`。
 - **原生 macOS App**：提供菜单栏、权限引导、监听启停、开机启动、记录窗口、配置查看、本地通知和验证码浮窗。
@@ -117,18 +117,24 @@ MsgFlow 使用 YAML 配置，默认路径为 `~/.config/msgflow/config.yaml`。D
 
 主要配置块：
 
+- `runtime`：共享的运行时默认项，包含轮询、保留策略、投递策略、回放行为、静默告警和验证码识别。
 - `target`：命名转发目标，每个目标指定一个 channel。
 - `sms.rules`：短信/iMessage 转发规则。
 - `notify.rules`：macOS 通知记录转发规则。
 - `ipn.rules`：iPhone 镜像通知转发规则。
 - `alarm.rules`：投递失败或消息源长时间静默时使用的告警规则。
 - `channel`：可选的通道公共默认配置。
-- `app`：可选的 App 历史记录保留策略。
 
 每个 destination 的最终配置由三层合并得到，后者覆盖前者：
 
 ```text
 channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
+```
+
+运行时字段则单独按以下顺序解析：
+
+```text
+runtime.<field> < <kind>.runtime.<field>
 ```
 
 完整配置结构、模板变量、过滤器、命令行参数和完整示例见 [配置文档](./docs/configuration.zh-CN.md)。
@@ -137,6 +143,10 @@ channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destin
 
 ```yaml
 source: MacBook
+
+runtime:
+  strategy: until_success
+  history_mode: from_now
 
 target:
   bark_phone:
@@ -150,7 +160,13 @@ target:
     channel: floating
 
 sms:
-  strategy: until_success
+  runtime:
+    history_mode: replay
+    code_pattern:
+      fallback_to_builtin: true
+      rules:
+        - pattern: "(?i)code[:：]\\s*(?P<c>\\d{6})"
+          group: c
   rules:
     - name_mark: verification_codes
       filters:
@@ -181,29 +197,30 @@ alarm:
 ## 注意事项
 
 - MsgFlow 只读取本机 macOS 数据源，不会修改 Messages、通知中心数据库或 iPhone 通知文件。
-- 首次启动会从每个消息源当前末尾开始监听，不会自动回放历史消息。
+- `history_mode: from_now` 时，会从每个消息源当前末尾开始监听；如需恢复已保存的远端游标，可改用 `history_mode: replay`。
 - 远端通道游标会持久化；本地通道（`notification`、`floating`）不会持久化游标。
 - 未签名或未公证的构建可能触发 Gatekeeper 提示。
 
 ## Roadmap
 
-- [x] 实时读取 macOS Messages 短信/iMessage
+- [x] 监听短信
 - [x] 中文简体、中文繁体、英文验证码自动识别
 - [x] 转发到 Bark、Telegram Bot、PushGo、飞书、Webhook、本地通知
 - [x] 基于 `and`、`or`、`selector` 的规则化转发
 - [x] `until_success` / `all` 两种投递策略
-- [x] 支持异常告警通知(alarm)
+- [x] 异常告警通知(alarm)
 - [x] 基于 `$default`、`$code` 的条件模板
 - [x] Pydantic 严格配置校验
-- [x] 支持监听 macOS 通知消息
+- [x] 监听 macOS 通知消息
 - [x] App 版本，初版支持菜单栏、切换监听状态、运行历史窗口等基础功能
-- [x] App 支持浮窗显示消息、验证码，支持点击输入/粘贴指定内容
-- [x] App 支持记录多重筛选、重新匹配、单目标重发、删除记录、查看配置和编辑游标
-- [x] rpc 更换为 unix socket
-- [x] App 支持多语言界面
-- [x] 支持监听来自 iPhone 的通知
-- [x] 基于规则的告警通知
-- [ ] App 自动签名构建产物
+- [x] App 浮窗显示消息、验证码，支持点击输入/粘贴指定内容
+- [x] App 记录多重筛选、重新匹配、单目标重发、删除记录、查看配置和编辑游标
+- [x] App 多语言界面
+- [x] 监听来自 iPhone 的通知
+- [x] 异常告警通知的规则匹配分发
+- [x] 自定义配置验证码正则、无消息超时告警、历史回看机制
+- [x] 配置正则替换指定字段内容
+- [ ] App 签名和公证
 
 ## 文档
 

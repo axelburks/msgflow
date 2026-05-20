@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 from typing import Any, Optional
 import regex
 
@@ -9,6 +10,21 @@ from .utils import try_parse_json
 TPL_VAR_PATTERN = r"\{\{(\w+)\}\}"
 # Allowed "conditional" keys for a value that varies by runtime context.
 ALLOWED_COND_KEYS = ("$default", "$code")
+# Destination key that carries regex rewrite rules instead of template data.
+# Centralized here so both the templating layer (which strips it before
+# rendering) and the config layer (which excludes it from tpl-var validation)
+# refer to the exact same name. Changing it in one place updates both.
+FIELD_REWRITE_KEY = "field_rewrite"
+DERIVED_FIELD_SPECS = {
+    "text": {
+        "depends_on": ("title", "subtitle", "body"),
+        "joiner": "\n",
+    },
+    "trans": {
+        "depends_on": ("sender", "receiver"),
+        "joiner": " -> ",
+    },
+}
 
 
 def render_template(template: Any, mapping: Optional[dict[str, Any]]) -> str:
@@ -26,7 +42,7 @@ def render_template(template: Any, mapping: Optional[dict[str, Any]]) -> str:
         return '' if value is None else str(value)
 
     rendered = regex.sub(TPL_VAR_PATTERN, _repl, template_str)
-    rendered = rendered.strip()
+    rendered = rendered.strip().rstrip(":")
     return rendered
 
 
@@ -37,20 +53,20 @@ def build_tpl_mapping(msg: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
     raw_msg = msg.get("msg")
     msg_text = raw_msg if isinstance(raw_msg, str) else json.dumps(raw_msg, ensure_ascii=False, separators=(",", ":"), default=str)
     mapping = {
-        "sender": msg.get('sender'),
-        "receiver": msg.get('receiver'),
-        "text": msg.get('text'),
-        "trans": msg.get('trans'),
-        "timestamp": msg.get('timestamp'),
-        "time_str": msg.get('time_str'),
+        "sender": msg.get("sender"),
+        "receiver": msg.get("receiver"),
+        "text": msg.get("text"),
+        "trans": msg.get("trans"),
+        "timestamp": msg.get("timestamp"),
+        "time_str": msg.get("time_str"),
         "msg": msg_text,
-        "code": msg.get('code'),
-        "source": msg.get('source'),
-        "title": msg.get('title'),
-        "subtitle": msg.get('subtitle'),
-        "body": msg.get('body'),
-        "error": kwargs.get('error'),
-        "traceback": kwargs.get('traceback'),
+        "code": msg.get("code"),
+        "source": msg.get("source"),
+        "title": msg.get("title"),
+        "subtitle": msg.get("subtitle"),
+        "body": msg.get("body"),
+        "error": kwargs.get("error"),
+        "traceback": kwargs.get("traceback"),
     }
     # Extra kwargs become additional template vars, but never override an
     # already-present non-None value (so msg.sender beats kwargs["sender"]).
@@ -59,6 +75,64 @@ def build_tpl_mapping(msg: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
             continue
         mapping[key] = value
     return mapping
+
+
+def _derive_joined_field(
+    mapping: dict[str, Any],
+    depends_on: tuple[str, ...],
+    joiner: str,
+) -> str:
+    parts = [mapping.get(field) for field in depends_on]
+    return joiner.join(str(part) for part in parts if part)
+
+
+def refresh_derived_mapping_fields(
+    mapping: dict[str, Any],
+    touched_fields: Optional[set[str]] = None,
+) -> dict[str, Any]:
+    # Recompute derived template-context fields from declarative dependencies.
+    # When `touched_fields` is provided, only recompute derived fields whose
+    # dependencies intersect the changed input fields; otherwise recompute all.
+    out = dict(mapping)
+    for field, spec in DERIVED_FIELD_SPECS.items():
+        depends_on = set(spec["depends_on"])
+        if touched_fields is not None and not (touched_fields & depends_on):
+            continue
+        out[field] = _derive_joined_field(out, spec["depends_on"], spec["joiner"])
+    return out
+
+
+def apply_field_rewrite(
+    mapping: dict[str, Any],
+    field_rewrite_cfg: Optional[dict[str, Any]],
+) -> tuple[dict[str, Any], set[str]]:
+    # Apply user-defined regex rewrites to selected template-context fields.
+    # `field_rewrite_cfg` is a dict keyed by field name; each value is a list
+    # of {pattern, replace} rules applied in order. Mutates a shallow copy
+    # and returns it; non-string values and missing keys are left as-is.
+    # Use inline flag syntax `(?i)`/`(?m)`/`(?s)` inside `pattern` instead of
+    # a separate `flags` field; pydantic already validates compilability.
+    if not field_rewrite_cfg:
+        return mapping, set()
+    out = dict(mapping)
+    touched_fields: set[str] = set()
+    for field, rules in field_rewrite_cfg.items():
+        if not rules:
+            continue
+        value = out.get(field)
+        if not isinstance(value, str):
+            continue
+        original = value
+        for rule in rules:
+            pattern = rule.get("pattern")
+            if not pattern:
+                continue
+            replace = rule.get("replace", "")
+            value = re.sub(pattern, replace, value)
+        out[field] = value
+        if value != original:
+            touched_fields.add(field)
+    return out, touched_fields
 
 
 def is_value_condition_dict(value: Any) -> bool:
@@ -159,12 +233,23 @@ def render_destination(
     if msg is None:
         msg = {}
     mapping = build_tpl_mapping(msg, **kwargs)
+    # `field_rewrite` lives on the destination but should rewrite the
+    # template-context, not the rendered payload, so apply it to `mapping`
+    # before rendering and then drop it from the rendered destination. The
+    # key name is `FIELD_REWRITE_KEY` so config validation and template
+    # rendering stay in lockstep when it is ever renamed.
+    field_rewrite_cfg = dest.get(FIELD_REWRITE_KEY)
+    if field_rewrite_cfg:
+        mapping, touched_fields = apply_field_rewrite(mapping, field_rewrite_cfg)
+        mapping = refresh_derived_mapping_fields(mapping, touched_fields=touched_fields)
     rendered_dest = copy.deepcopy(dest)
+    rendered_dest.pop(FIELD_REWRITE_KEY, None)
     # Surface `code` at the top level so channel notifiers (e.g. tgbot's
     # HTML escaping path) can access it without re-parsing the payload.
-    rendered_dest["code"] = msg.get('code')
-    has_code = bool(msg.get('code'))
+    rendered_dest["code"] = msg.get("code")
+    has_code = bool(msg.get("code"))
     rendered_dest = render_value(rendered_dest, mapping, has_code=has_code)
+    rendered_dest[FIELD_REWRITE_KEY] = field_rewrite_cfg
     return rendered_dest
 
 

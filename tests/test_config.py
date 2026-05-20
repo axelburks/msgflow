@@ -122,6 +122,58 @@ sms:
         Config(debug=False)
 
 
+def test_config_allows_partial_kind_runtime_before_build_and_merges_root_runtime(monkeypatch, tmp_path):
+    monkeypatch.setenv("MSGFLOW_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.yaml").write_text(
+        """
+target:
+  mac:
+    channel: notification
+sms:
+  runtime:
+    history_mode: replay
+  rules:
+    - name_mark: code
+      destinations:
+        - target: mac
+""",
+        encoding="utf-8",
+    )
+
+    cfg = Config(debug=False)
+
+    assert cfg.effective_cfg["sms"]["runtime"] == {"history_mode": "replay"}
+    assert cfg.built_cfg["sms"]["runtime"]["history_mode"] == "replay"
+    assert cfg.built_cfg["sms"]["runtime"]["check_interval"] == cfg.built_cfg["runtime"]["check_interval"]
+    assert cfg.built_cfg["sms"]["runtime"]["retention"] == cfg.built_cfg["runtime"]["retention"]
+
+
+def test_config_allows_missing_kind_blocks(monkeypatch, tmp_path):
+    monkeypatch.setenv("MSGFLOW_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.yaml").write_text(
+        """
+target:
+  mac:
+    channel: notification
+sms:
+  rules:
+    - name_mark: code
+      destinations:
+        - target: mac
+""",
+        encoding="utf-8",
+    )
+
+    cfg = Config(debug=False)
+
+    assert cfg.effective_cfg["ipn"] == {"runtime": {}, "rules": []}
+    assert cfg.effective_cfg["notify"] == {"runtime": {}, "rules": []}
+    assert cfg.effective_cfg["alarm"] == {"runtime": {}, "rules": []}
+    assert cfg.built_cfg["notify"]["rules"] == []
+    assert cfg.built_cfg["alarm"]["rules"] == []
+    assert cfg.built_cfg["ipn"]["rules"] == []
+
+
 def test_resolve_destination_applies_channel_kind_target_and_destination_precedence(monkeypatch, tmp_path):
     monkeypatch.setenv("MSGFLOW_CONFIG_DIR", str(tmp_path))
     cfg = Config(debug=False)

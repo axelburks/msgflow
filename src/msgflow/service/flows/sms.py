@@ -27,7 +27,6 @@ class SMSFlow(MsgFlow):
     KIND = "sms"
     NEW_MSG_HIT = "📩 new"
     DONE_MSG_HIT = "✉️  done"
-    NO_NEW_MSG_TEXT = "no sms received for 24h"
     # `message.ROWID` is assigned at local INSERT time and is strictly
     # monotonic w.r.t. DB-arrival order, which is what we actually want for
     # "forward once per row" semantics — even if `date` is older (e.g. SMS
@@ -46,7 +45,7 @@ class SMSFlow(MsgFlow):
             "select ifnull(max(message.ROWID), 0) as max_rowid "
             "from message where is_from_me = 0"
         )
-        return int(rows[0]['max_rowid']) if rows else 0
+        return int(rows[0]["max_rowid"]) if rows else 0
 
     def query_new_msgs(self) -> list[dict[str, Any]]:
         # Pull every inbound message with ROWID greater than the oldest
@@ -88,22 +87,22 @@ class SMSFlow(MsgFlow):
         #   attributedBody (typedstream blob) when the plain `body` column is empty
         result = []
         for row in data[:]:
-            if not row.get('text'):
-                if row.get('attributedBody'):
-                    row['attributedBody'] = _extract_from_applearchive(row.get('attributedBody'))
+            if not row.get("text"):
+                if row.get("attributedBody"):
+                    row["attributedBody"] = _extract_from_applearchive(row.get("attributedBody"))
                 else:
                     data.remove(row)
                     continue
             else:
                 row.pop('attributedBody', None)
-            timestamp = float(row.get('date') or 0) / self._NS_PER_SEC + MAC_EPOCH_OFFSET
+            timestamp = float(row.get("date") or 0) / self._NS_PER_SEC + MAC_EPOCH_OFFSET
             time_str = format_ts(timestamp)
             msg = {
-                "rowid": row.get('ROWID'),
-                "sender": row.get('uncanonicalized_id') or row.get('chat_identifier'),
-                "receiver": row.get('destination_caller_id'),
-                "title": row.get('subject'),
-                "body": row.get('text') or row.get('attributedBody'),
+                "rowid": row.get("ROWID"),
+                "sender": row.get("uncanonicalized_id") or row.get("chat_identifier"),
+                "receiver": row.get("destination_caller_id"),
+                "title": row.get("subject"),
+                "body": row.get("text") or row.get("attributedBody"),
                 "time_str": time_str,
                 "timestamp": timestamp,
                 "msg": row

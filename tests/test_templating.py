@@ -1,7 +1,9 @@
 from msgflow.common.templating import (
+    apply_field_rewrite,
     build_tpl_mapping,
     collect_tpl_vars,
     is_value_condition_dict,
+    refresh_derived_mapping_fields,
     render_destination,
     render_template,
     render_value,
@@ -12,7 +14,7 @@ from msgflow.common.templating import (
 def test_render_template_substitutes_values_and_drops_missing_vars():
     rendered = render_template("  {{sender}} -> {{receiver}}: {{missing}}  ", {"sender": "A", "receiver": "B"})
 
-    assert rendered == "A -> B:"
+    assert rendered == "A -> B"
 
 
 def test_build_tpl_mapping_prefers_message_values_over_kwargs():
@@ -91,3 +93,94 @@ def test_render_destination_deep_copies_and_exposes_code():
     assert rendered["code"] == "123456"
     assert rendered["payload"] == {"title": "code 123456", "body": "验证码 123456"}
     assert dest["payload"]["title"] == {"$default": "{{sender}}", "$code": "code {{code}}"}
+
+
+def test_render_destination_refreshes_derived_text_after_body_rewrite():
+    dest = {
+        "channel": "floating",
+        "field_rewrite": {
+            "body": [{"pattern": r"\d{6}", "replace": "replaced"}],
+        },
+        "payload": {
+            "body": {"$default": "{{body}}", "$code": "{{text}}"},
+        },
+    }
+    msg = {
+        "title": "Bark",
+        "subtitle": "中国移动云盘",
+        "body": "验证码：125800，请勿泄露",
+        "text": "Bark\n中国移动云盘\n验证码：125800，请勿泄露",
+        "code": "125800",
+    }
+
+    rendered = render_destination(dest, msg)
+
+    assert rendered["payload"]["body"] == "Bark\n中国移动云盘\n验证码：replaced，请勿泄露"
+
+
+def test_apply_field_rewrite_runs_rules_in_order_per_field():
+    mapping = {"text": "phone 13800001234 here", "title": "no change"}
+    cfg = {
+        "text": [
+            {"pattern": r"(\d{3})\d{4}(\d{4})", "replace": r"\1****\2"},
+            {"pattern": r"phone", "replace": "ph"},
+        ],
+    }
+
+    result, touched_fields = apply_field_rewrite(mapping, cfg)
+
+    assert result["text"] == "ph 138****1234 here"
+    assert result["title"] == "no change"
+    assert touched_fields == {"text"}
+
+
+def test_apply_field_rewrite_skips_missing_or_non_string_fields():
+    mapping = {"text": None, "code": 123}
+    cfg = {
+        "text": [{"pattern": r"x", "replace": "y"}],
+        "code": [{"pattern": r"1", "replace": "9"}],
+    }
+
+    result, touched_fields = apply_field_rewrite(mapping, cfg)
+
+    assert result == {"text": None, "code": 123}
+    assert touched_fields == set()
+
+
+def test_apply_field_rewrite_supports_inline_flags():
+    mapping = {"body": "Hello WORLD"}
+    cfg = {"body": [{"pattern": r"(?i)world", "replace": "earth"}]}
+
+    result, touched_fields = apply_field_rewrite(mapping, cfg)
+
+    assert result["body"] == "Hello earth"
+    assert touched_fields == {"body"}
+
+
+def test_apply_field_rewrite_returns_input_when_cfg_empty():
+    mapping = {"text": "hi"}
+
+    result, touched_fields = apply_field_rewrite(mapping, None)
+    assert result is mapping
+    assert touched_fields == set()
+
+    result, touched_fields = apply_field_rewrite(mapping, {})
+    assert result is mapping
+    assert touched_fields == set()
+
+
+def test_refresh_derived_mapping_fields_recomputes_only_affected_fields():
+    mapping = {
+        "sender": "Alice",
+        "receiver": "Bob",
+        "title": "Title",
+        "subtitle": "Subtitle",
+        "body": "Body",
+        "text": "stale text",
+        "trans": "stale trans",
+    }
+
+    refreshed = refresh_derived_mapping_fields(mapping, touched_fields={"body"})
+
+    assert refreshed["text"] == "Title\nSubtitle\nBody"
+    assert refreshed["trans"] == "stale trans"

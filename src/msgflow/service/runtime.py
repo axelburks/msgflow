@@ -19,15 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 def _sms_enabled() -> bool:
-    return bool(config.cfg and config.cfg.built_cfg.get("sms", {}).get("rules"))
+    return bool(config.cfg and config.cfg.built_cfg["sms"]["rules"])
 
 
 def _notify_enabled() -> bool:
-    return bool(config.cfg and config.cfg.built_cfg.get("notify", {}).get("rules"))
+    return bool(config.cfg and config.cfg.built_cfg["notify"]["rules"])
 
 
 def _ipn_enabled() -> bool:
-    return bool(config.cfg and config.cfg.built_cfg.get("ipn", {}).get("rules"))
+    return bool(config.cfg and config.cfg.built_cfg["ipn"]["rules"])
 
 
 def _source_display_name(kind: str) -> str:
@@ -50,11 +50,14 @@ class CoreRuntime(object):
         if config.cfg is None:
             raise ValueError("config.cfg is not initialized")
         self.cfg = config.cfg
-        self.check_interval = self.cfg.built_cfg.get("check_interval")
+        self.check_interval = self.cfg.built_cfg["runtime"]["check_interval"]
         self.status = "running"
         self.error: dict[str, Any] | None = None
         self.history = HistoryStore(self.cfg.history_file_path)
-        self.retention = dict(self.cfg.built_cfg.get("app", {}).get("retention") or {})
+        self.retention = {
+            key: dict(self.cfg.built_cfg[key]["runtime"]["retention"])
+            for key in MESSAGE_KINDS
+        }
         self.insert_since_last_cleanup = 0
         self.last_cleanup_at = 0.0
         self.flows: list[Any] = []
@@ -273,7 +276,7 @@ class CoreRuntime(object):
     def get_status(self) -> dict[str, Any]:
         return {
             "status": self.status,
-            "source": self.cfg.built_cfg.get("source"),
+            "source": self.cfg.built_cfg["source"],
             "retention": self.retention,
             "error": self.error,
             "pending_command": self._pending_command,
@@ -293,7 +296,7 @@ class CoreRuntime(object):
         return selected_kind
 
     def _configured_destinations_for_kind(self, kind: str) -> list[str]:
-        rules = self.cfg.built_cfg.get(kind, {}).get("rules") or []
+        rules = self.cfg.built_cfg[kind]["rules"]
         destinations: list[str] = []
         seen: set[str] = set()
         for rule in rules:
@@ -307,33 +310,32 @@ class CoreRuntime(object):
 
     def get_cursor_state(self, kind: Optional[str]) -> dict[str, Any]:
         selected_kind = self._validate_kind(kind) if kind else None
-        return {"items": self.history.get_cursor_map(selected_kind)}
+        items = self.history.get_cursor_map(selected_kind)
+        if selected_kind is None:
+            return {"items": items}
+        allowed_destinations = set(self._configured_destinations_for_kind(selected_kind))
+        return {
+            "items": [
+                item
+                for item in items
+                if item.get("destination") in allowed_destinations
+            ]
+        }
 
     def update_cursor_state(self, kind: str, cursor_map: dict[str, Any]) -> dict[str, Any]:
         selected_kind = self._validate_kind(kind)
-        if not isinstance(cursor_map, dict) or not cursor_map:
-            raise ValueError("cursor_map must be a non-empty object")
-        allowed_destinations = set(self._configured_destinations_for_kind(selected_kind))
-        if not allowed_destinations:
-            raise ValueError(f"no configured destinations found for '{selected_kind}'")
         normalized_map: dict[str, float] = {}
         for destination, cursor_value in cursor_map.items():
-            dest_name = str(destination or "").strip()
-            if not dest_name:
-                raise ValueError("destination name cannot be empty")
-            if dest_name not in allowed_destinations:
-                raise ValueError(f"unknown destination '{dest_name}' for '{selected_kind}'")
             if not isinstance(cursor_value, (int, float)) or isinstance(cursor_value, bool):
-                raise ValueError(f"cursor for '{dest_name}' must be numeric")
-            normalized_map[dest_name] = float(cursor_value)
-        if not normalized_map:
-            raise ValueError("no valid cursor values provided")
+                raise ValueError(f"cursor for '{destination}' must be numeric")
+            normalized_map[destination] = float(cursor_value)
         self.history.set_cursor_map(selected_kind, normalized_map)
         for flow in self.flows:
             if flow.KIND != selected_kind:
                 continue
             for dest_name, cursor_value in normalized_map.items():
-                flow.cursor[dest_name] = cursor_value
+                if dest_name in flow.cursor:
+                    flow.cursor[dest_name] = cursor_value
             flow.min_cursor = min(flow.cursor.values()) if flow.cursor else 0.0
             break
         return self.get_cursor_state(selected_kind)

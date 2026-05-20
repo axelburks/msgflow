@@ -3,8 +3,8 @@ from typing import Any, Optional
 import regex
 
 from ...common.run_models import RunStatus, RunTriggerType
-from ...common.templating import render_destination
-from ...common.utils import build_message_text, build_message_trans, format_ts, get_code_from_text
+from ...common.templating import refresh_derived_mapping_fields, render_destination
+from ...common.utils import format_ts, extract_code
 from ..channels import Channels, CHANNEL_NOTIFIERS, LOCAL_CHANNELS
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,6 @@ class MsgFlow(Channels):
     KIND = "msg"
     NEW_MSG_HIT = "new"
     DONE_MSG_HIT = "done"
-    NO_NEW_MSG_TEXT = "no msg received for 24h"
     # Cursor field name; subclasses must set this explicitly (for example,
     # "rowid" or "rec_id"). It is both the key in the `msg` dict and the
     # column alias selected in SQL.
@@ -58,11 +57,17 @@ class MsgFlow(Channels):
         # In-memory only: last seen message timestamp per dest, for readable logs.
         self.last_seen_ts: dict[str, float] = {}
         self.built_cfg = _config.cfg.built_cfg
-        self.rules = self.built_cfg.get(self.KIND, {}).get('rules', [])
+        self.kind_cfg = self.built_cfg[self.KIND]
+        self.runtime_cfg = self.kind_cfg["runtime"]
+        self.history_mode = self.runtime_cfg["history_mode"]
+        self.stale_alarm_seconds = self.runtime_cfg["stale_alarm_seconds"]
+        self.code_pattern_cfg = self.runtime_cfg["code_pattern"]
+        self.rules = self.kind_cfg["rules"]
         self.destinations = self._flatten_destinations()
-        self.alarm_strategy = self.built_cfg['alarm']['strategy']
-        self.alarm_rules = self.built_cfg['alarm'].get('rules', [])
-        self.source = self.built_cfg.get('source')
+        alarm_runtime = self.built_cfg["alarm"]["runtime"]
+        self.alarm_strategy = alarm_runtime["strategy"]
+        self.alarm_rules = self.built_cfg["alarm"]["rules"]
+        self.source = self.built_cfg["source"]
         self.init_cursor()
 
     # ---------- Config / state ----------
@@ -72,7 +77,7 @@ class MsgFlow(Channels):
         # so we can uniformly track last-forwarded cursor per destination.
         flat = []
         for rule in self.rules:
-            flat.extend(rule['destinations'])
+            flat.extend(rule["destinations"])
         return flat
 
     def initial_cursor(self) -> float:
@@ -84,16 +89,22 @@ class MsgFlow(Channels):
     def init_cursor(self, load_saved: bool = True) -> None:
         # Initialize `cursor` (last-forwarded cursor key per destination).
         # When `load_saved` is True, previously persisted values are restored
-        # so restarts don't re-forward old messages.
-        saved_cursor = self._load_saved_cursor() if load_saved else {}
+        # so restarts don't re-forward old messages — but only if the
+        # configured `history_mode` is `replay`. With `history_mode == "from_now"`
+        # we always start fresh from the DB tail and ignore any saved cursor,
+        # matching the user's intent to skip historical data on start-up.
+        if load_saved and self.history_mode == "replay":
+            saved_cursor = self._load_saved_cursor()
+        else:
+            saved_cursor = {}
 
         db_tail = self.initial_cursor()
         for dest in self.destinations:
-            dest_name = dest['name_mark']
+            dest_name = dest["name_mark"]
             # Local-only channels (e.g. macOS notification) are not persisted:
             # they are side effects on the current machine, not remote delivery,
             # so always start from the DB tail to avoid spamming on restart.
-            if dest.get('channel') in LOCAL_CHANNELS:
+            if dest.get("channel") in LOCAL_CHANNELS:
                 self.cursor[dest_name] = db_tail
                 continue
             if dest_name in saved_cursor:
@@ -167,7 +178,7 @@ class MsgFlow(Channels):
         # All configured filters must pass (logical AND between filters).
         if filters:
             for f in filters:
-                if not self.is_filter_matched(msg, f['match'], f['type']):
+                if not self.is_filter_matched(msg, f["match"], f["type"]):
                     _observe_log(f"🕸️  filter [x]: {json.dumps(f, ensure_ascii=False, default=str)}")
                     return False
                 else:
@@ -187,7 +198,7 @@ class MsgFlow(Channels):
         results = []
         all_matched = True
         for idx, cur_filter in enumerate(filters):
-            cur_matched = self.is_filter_matched(msg, cur_filter['match'], cur_filter['type'])
+            cur_matched = self.is_filter_matched(msg, cur_filter["match"], cur_filter["type"])
             _observe_log(
                 f"🕸️  filter [{'√' if cur_matched else 'x'}]: "
                 f"{json.dumps(cur_filter, ensure_ascii=False, default=str)}"
@@ -205,13 +216,14 @@ class MsgFlow(Channels):
         return all_matched, results
 
     def _build_template_context(self, raw_msg: dict[str, Any]) -> dict[str, Any]:
-        text = build_message_text(raw_msg)
-        trans = build_message_trans(raw_msg)
+        derived_fields = refresh_derived_mapping_fields(raw_msg)
+        text = derived_fields["text"]
+        trans = derived_fields["trans"]
         return {
             "source": self.source,
             "text": text,
             "trans": trans,
-            "code": get_code_from_text(text),
+            "code": extract_code(text, self.code_pattern_cfg),
         }
 
     def _build_run_status(
@@ -270,7 +282,11 @@ class MsgFlow(Channels):
             if selected_rule and rule_name != selected_rule:
                 continue
             rule_filters = rule.get("filters")
-            rule_strategy = rule.get("strategy")
+            # Rule-level `strategy` is a per-rule override; when unset, fall
+            # back to the kind-effective `runtime.strategy`. Resolved at
+            # use-site (mirroring the alarm path) so the config layer can
+            # remain pure schema validation with no synthesis.
+            rule_strategy = rule.get("strategy") or self.runtime_cfg["strategy"]
             rule_dests = rule.get("destinations") or []
             _observe_log(f"📏 {rule_name}({rule_strategy})")
 
@@ -325,7 +341,7 @@ class MsgFlow(Channels):
                 dest_name = dest["name_mark"]
                 if selected_dest and dest_name != selected_dest:
                     continue
-                dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
+                dest_mark = f'{dest.get("logmarker")} {dest_name}({dest.get("channel")})'
                 last_key = self.cursor.get(dest_name, -1)
                 dest_result = dest_results_by_name[dest_name]
                 key_passed = bool(dest_result["cursor_allowed"])
@@ -434,8 +450,8 @@ class MsgFlow(Channels):
         # Validate every destination is reachable by sending a synthetic "check passed"
         # message. Used by the `--check` CLI mode to fail fast on misconfigured channels.
         for dest in self.destinations:
-            dest_name = dest.get('name_mark')
-            dest_mark = f"{dest.get('logmarker')} {dest_name}({dest.get('channel')})"
+            dest_name = dest.get("name_mark")
+            dest_mark = f'{dest.get("logmarker")} {dest_name}({dest.get("channel")})'
             try:
                 check_title = f"{dest_mark} check passed"
                 check_msg = {
@@ -463,7 +479,7 @@ class MsgFlow(Channels):
             msg = {}
         logger.info(f"{'#' * 15} ⚠️  {self.KIND} alarm start {'#' * 15}")
         try:
-            msg['source'] = self.source
+            msg["source"] = self.source
             msg.update(self._build_template_context(msg))
             any_success = False
             any_failed = False
@@ -577,11 +593,14 @@ class MsgFlow(Channels):
             # arrived yet.
             self.persist_cursor_state(mock, full_snapshot=True)
 
-        if c_timestamp - self.last_new_msg_time > 60 * 60 * 24:
-            # Watchdog: if no new message for 24h, surface it via a local
-            # notification + alarm channels, then reset the watchdog timer.
-            self.send_notification(self.NO_NEW_MSG_TEXT)
-            self.send_alarm(error=self.NO_NEW_MSG_TEXT)
+        if self.stale_alarm_seconds > 0 and (c_timestamp - self.last_new_msg_time > self.stale_alarm_seconds):
+            # Watchdog: if no new message for `stale_alarm_seconds` (configured
+            # via `runtime.stale_alarm_seconds`, default 0 = disabled), surface
+            # it via a local notification + alarm channels, then reset the
+            # watchdog timer.
+            stale_text = f"no {self.KIND} received for {self.stale_alarm_seconds}s"
+            self.send_notification(stale_text)
+            self.send_alarm(error=stale_text)
             self.last_new_msg_time = c_timestamp
 
     def update_hook(self) -> None:

@@ -74,16 +74,16 @@ class Channels(object):
         # Generic HTTP webhook notifier. Other HTTP-based channels delegate to
         # this method so transport-level behavior (timeouts, logging, success
         # criteria) is shared.
-        logmarker = dest.get('logmarker')
-        dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
+        logmarker = dest.get("logmarker")
+        dest_mark = f'{logmarker} {dest.get("name_mark")}({dest.get("channel")})'
         try:
             logger.info(f"{dest_mark}")
-            method = dest.get('method').upper()
-            url = dest.get('url')
-            params = dest.get('params')
-            headers = dest.get('headers')
-            payload = dest.get('payload')
-            timeout = dest.get('timeout')
+            method = dest.get("method").upper()
+            url = dest.get("url")
+            params = dest.get("params")
+            headers = dest.get("headers")
+            payload = dest.get("payload")
+            timeout = dest.get("timeout")
             # Only forward kwargs that are actually provided so `requests`
             # applies its own defaults for the rest.
             req_kwargs: dict[str, Any] = {}
@@ -101,7 +101,7 @@ class Channels(object):
             formatted_res_text = self._format_http_response_text(res)
             logger.debug(f"{dest_mark} response: {res.status_code} {formatted_res_text}")
 
-            success_json = dest.get('success_json')
+            success_json = dest.get("success_json")
             if success_json is None:
                 # No custom success criterion: 200 OK is success.
                 if res.status_code != 200:
@@ -136,22 +136,22 @@ class Channels(object):
         # If a verification code was extracted, wrap it in <code> tags so
         # Telegram renders it monospaced and tap-to-copy.
         try:
-            payload = dest.get('payload')
+            payload = dest.get("payload")
             if (
                 isinstance(payload, dict)
                 and 'text' in payload
-                and str(payload.get('parse_mode') or '').upper() == 'HTML'
+                and str(payload.get("parse_mode") or '').upper() == 'HTML'
             ):
-                escaped_text = html.escape(payload.get('text'))
-                code = dest.get('code')
+                escaped_text = html.escape(payload.get("text"))
+                code = dest.get("code")
                 if code:
                     escaped_text = escaped_text.replace(code, f"<code>{code}</code>")
-                payload['text'] = escaped_text
-                dest['payload'] = payload
+                payload["text"] = escaped_text
+                dest["payload"] = payload
             return self.notify_to_webhook(dest)
         except Exception as e:
-            logmarker = dest.get('logmarker')
-            dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
+            logmarker = dest.get("logmarker")
+            dest_mark = f'{logmarker} {dest.get("name_mark")}({dest.get("channel")})'
             return False, f"{dest_mark} error: {e}"
 
     @channel('lark')
@@ -165,12 +165,12 @@ class Channels(object):
         # App-backed local notification. Kept as a local-only channel so the
         # current machine owns presentation while the forwarding pipeline still
         # uses the same destination abstraction as remote channels.
-        logmarker = dest.get('logmarker')
-        dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
+        logmarker = dest.get("logmarker")
+        dest_mark = f'{logmarker} {dest.get("name_mark")}({dest.get("channel")})'
         logger.info(f"{dest_mark}")
-        payload = dest.get('payload') or {}
-        title = payload.get('title')
-        body = payload.get('body')
+        payload = dest.get("payload") or {}
+        title = payload.get("title")
+        body = payload.get("body")
         if not title or not body:
             return False, f"{dest_mark} error: title or body is empty in payload"
         cur_status, cur_res = app_show_notification(str(title), str(body))
@@ -179,8 +179,8 @@ class Channels(object):
             if fallback_status:
                 logger.warning(f"{dest_mark} app rpc unavailable, using osascript fallback")
                 cur_status, cur_res = True, f"{cur_res}; fallback: {fallback_res}"
-        if cur_status and payload.get('autoCopy') == 1 and payload.get('copy'):
-            self.save_to_clipboard(payload.get('copy'))
+        if cur_status and payload.get("autoCopy") == 1 and payload.get("copy"):
+            self.save_to_clipboard(payload.get("copy"))
         if not cur_status:
             return False, f"{dest_mark} error: {cur_res}"
         return True, cur_res
@@ -189,13 +189,13 @@ class Channels(object):
     def notify_to_floating(self, dest: dict[str, Any]) -> tuple[bool, str]:
         # Floating panel is also presented by the local app process. It shows
         # message content near the cursor and provides fixed Type/Paste actions.
-        logmarker = dest.get('logmarker')
-        dest_mark = f"{logmarker} {dest.get('name_mark')}({dest.get('channel')})"
+        logmarker = dest.get("logmarker")
+        dest_mark = f'{logmarker} {dest.get("name_mark")}({dest.get("channel")})'
         logger.info(f"{dest_mark}")
-        payload = dest.get('payload') or {}
-        title = payload.get('title')
-        body = payload.get('body')
-        input_text = payload.get('input')
+        payload = dest.get("payload") or {}
+        title = payload.get("title")
+        body = payload.get("body")
+        input_text = payload.get("input")
         if not title or not body or input_text is None or input_text == '':
             return False, f"{dest_mark} error: title/body/input is empty in payload"
         cur_status, cur_res = app_show_floating(str(title), str(body), str(input_text))

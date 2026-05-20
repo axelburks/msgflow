@@ -975,17 +975,16 @@ class MainWindowController(NSObject):
     def _selected_run_summary(self, item: dict[str, Any]) -> str:
         run_id = item.get("run_id")
         message_id = item.get("message_id")
-        status = item.get("status") or ""
-        created_at = item.get("created_at_str") or ""
-        text_preview = (item.get("text_preview") or "").replace("\n", " ").strip()
+        status = item.get("status")
+        created_at = item.get("created_at_str")
+        text_preview = item.get("text_preview")
         summary = (
             f"{t('run.run_id')}: {run_id}\n"
             f"{t('run.message_id')}: {message_id}\n"
             f"{t('run.status')}: {status}\n"
-            f"{t('run.created')}: {created_at}"
+            f"{t('run.created')}: {created_at}\n"
+            f"{t('run.message')}: {text_preview}"
         )
-        if text_preview:
-            summary += f"\n{t('run.message')}: {text_preview}"
         return summary
 
     @objc.python_method
@@ -1287,7 +1286,7 @@ class MainWindowController(NSObject):
                 self.app_controller.restart_managed_core()
             payload = core_client.get_built_config()
             built_cfg = payload.get("built_cfg") or {}
-            self.config_window.setTitle_(f"{t('config.built_title')} - {payload.get('config_file_path') or ''}")
+            self.config_window.setTitle_(f'{t("config.built_title")} - {payload.get("config_file_path") or ""}')
             self._render_config_payload(built_cfg)
             if reload_from_disk:
                 self.refresh_data()
@@ -1743,8 +1742,6 @@ class MainWindowController(NSObject):
 
     @objc.python_method
     def _populate_run_cell_view(self, cell, item: dict[str, Any]) -> None:
-        trans = " <- ".join(str(part) for part in [item.get("sender"), item.get("receiver")] if part)
-        text_preview = (item.get("text_preview") or "").replace("\n", " ").strip()
         cursor_value = item.get("cursor_value")
         cursor_text = self._format_cursor_value(cursor_value)
         line1_left = cell.viewWithTag_(self.TAG_LINE1_LEFT)
@@ -1755,11 +1752,11 @@ class MainWindowController(NSObject):
         line4_left = cell.viewWithTag_(self.TAG_LINE4_LEFT)
         line4_middle = cell.viewWithTag_(self.TAG_LINE4_MIDDLE)
         line4_right = cell.viewWithTag_(self.TAG_LINE4_RIGHT)
-        line1_left.setStringValue_(f"{item.get('run_id')}({item.get('message_id')})")
+        line1_left.setStringValue_(f'{item.get("run_id")}({item.get("message_id")})')
         line1_middle.setStringValue_(str(item.get("status") or ""))
         line1_right.setStringValue_(str(item.get("created_at_str") or ""))
-        line2.setStringValue_(trans)
-        line3.setStringValue_(text_preview)
+        line2.setStringValue_(item.get("trans"))
+        line3.setStringValue_(item.get("text_preview"))
         line4_left.setStringValue_(str(item.get("trigger_type") or ""))
         line4_middle.setStringValue_(str(item.get("time_str") or ""))
         line4_right.setStringValue_(cursor_text)

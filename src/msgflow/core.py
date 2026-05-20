@@ -15,17 +15,17 @@ logger = logging.getLogger(__name__)
 
 def _sms_enabled() -> bool:
     # SMS flow is active only when at least one SMS rule is configured.
-    return bool(config.cfg.built_cfg.get('sms', {}).get('rules'))
+    return bool(config.cfg.built_cfg["sms"]["rules"])
 
 
 def _notify_enabled() -> bool:
     # Notify flow is active only when at least one Notify rule is configured.
-    return bool(config.cfg.built_cfg.get('notify', {}).get('rules'))
+    return bool(config.cfg.built_cfg["notify"]["rules"])
 
 
 def _ipn_enabled() -> bool:
     # iPhone notification flow is active only when at least one IPN rule is configured.
-    return bool(config.cfg.built_cfg.get('ipn', {}).get('rules'))
+    return bool(config.cfg.built_cfg["ipn"]["rules"])
 
 
 def _fixture_file_from_dir(fixture_dir: str, kind: str) -> str:
@@ -72,7 +72,7 @@ class MsgFlowApp(object):
 
     def __init__(self, runtime: CoreRuntime) -> None:
         self.runtime = runtime
-        self.check_interval = config.cfg.built_cfg.get('check_interval')
+        self.check_interval = config.cfg.built_cfg["runtime"]["check_interval"]
         self.flows = []
 
     def build_flows(self) -> None:

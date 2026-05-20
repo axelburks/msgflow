@@ -11,19 +11,13 @@ ALARM_COPY = f"{ALARM_TITLE}\n\n{ALARM_BODY}"
 
 CONFIG_DEFAULTS = {
     "source": "msgflow",
-    "check_interval": 1,
-    "app": {
-        "retention": {
-            "sms": {"mode": "count", "value": 5000},
-            "notify": {"mode": "days", "value": 30},
-            "ipn": {"mode": "days", "value": 30},
-        },
+    "runtime": {
+        "check_interval": 1,
+        "strategy": "until_success",
+        "history_mode": "from_now",
+        "stale_alarm_seconds": 0,
+        "retention": {"mode": "count", "value": 5000},
     },
-    "target": {},
-    "sms": {"strategy": "until_success"},
-    "notify": {"strategy": "until_success"},
-    "ipn": {"strategy": "until_success"},
-    "alarm": {"strategy": "until_success"},
     "channel": {
         "webhook": {
             "logmarker": "🌐",
@@ -91,14 +85,107 @@ CONFIG_DEFAULTS = {
             "logmarker": "📘",
             "method": "POST",
             "payload": {
-                "$default": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"blue\",\"title\":{\"content\":\"{{receiver}} <- {{sender}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{text}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}}",
-                "$code": "{\"header\":{\"template\":\"green\",\"title\":{\"content\":\"🌀 验证码 {{code}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"column_set\",\"flex_mode\":\"none\",\"background_style\":\"grey\",\"horizontal_spacing\":\"default\",\"columns\":[{\"tag\":\"column\",\"width\":\"weighted\",\"weight\":1,\"elements\":[{\"tag\":\"markdown\",\"text_align\":\"center\",\"content\":\"{{code}}\\n\"}]}]},{\"tag\":\"div\",\"text\":{\"content\":\"{{receiver}} <- {{sender}}\\n{{text}}\\n{{source}} - {{time_str}}\",\"tag\":\"lark_md\"}}]}"
+                "$default": {
+                    "msg_type": "interactive",
+                    "card": {
+                        "schema": "2.0",
+                        "header": {
+                            "template": "blue",
+                            "title": {
+                                "content": TRANS_TITLE,
+                                "tag": "plain_text"
+                            }
+                        },
+                        "body": {
+                            "elements": [
+                                {
+                                    "tag": "div",
+                                    "text": {
+                                        "content": SUBT_BODY_SRC_TIME,
+                                        "tag": "lark_md"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "$code": {
+                    "msg_type": "interactive",
+                    "card": {
+                        "schema": "2.0",
+                        "header": {
+                            "template": "green",
+                            "title": {
+                                "content": CODE_TITLE,
+                                "tag": "plain_text"
+                            },
+                            "subtitle": {
+                                "content": TRANS_TITLE,
+                                "tag": "plain_text"
+                            }
+                        },
+                        "body": {
+                            "elements": [
+                                {
+                                    "tag": "column_set",
+                                    "flex_mode": "none",
+                                    "background_style": "grey",
+                                    "horizontal_spacing": "default",
+                                    "columns": [
+                                        {
+                                            "tag": "column",
+                                            "width": "weighted",
+                                            "weight": 1,
+                                            "elements": [
+                                                {
+                                                    "tag": "markdown",
+                                                    "text_align": "center",
+                                                    "content": "{{code}}"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "tag": "div",
+                                    "text": {
+                                        "content": SUBT_BODY_SRC_TIME,
+                                        "tag": "lark_md"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
             },
             "success_json": {"code": 0},
             "kinds": {
                 "alarm": {
-                    "payload": "{\"msg_type\":\"interactive\",\"card\":{\"header\":{\"template\":\"red\",\"title\":{\"content\":\"{{source}}: {{error}}\",\"tag\":\"plain_text\"}},\"elements\":[{\"tag\":\"div\",\"text\":{\"content\":\"{{msg}}\\n\\n{{traceback}}\",\"tag\":\"lark_md\"}}]}}",
-                },
+                    "payload": {
+                        "msg_type": "interactive",
+                        "card": {
+                            "schema": "2.0",
+                            "header": {
+                                "template": "red",
+                                "title": {
+                                    "content": ALARM_TITLE,
+                                    "tag": "plain_text"
+                                }
+                            },
+                            "body": {
+                                "elements": [
+                                    {
+                                        "tag": "div",
+                                        "text": {
+                                            "content": ALARM_BODY,
+                                            "tag": "lark_md"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
             },
         },
         "notification": {
@@ -143,27 +230,30 @@ CONFIG_TEMPLATE = """# msgflow runtime config
 # Active fields below are the minimal valid config and also show example config.
 # Commented blocks are examples. Uncomment and edit them to override defaults.
 # Defaults not shown here are still merged from the built-in config.
-# Config Priority: channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
+# Resolution priority for destinations:
+#   channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
+# Resolution priority for runtime fields:
+#   runtime.<field> < <kind>.runtime.<field>
 
 source: msgflow        # default: msgflow
-check_interval: 1     # default: 1 second
 
-# app:                # default: retention.sms=count/5000, retention.notify=days/30, retention.ipn=days/30
-#   retention:
-#     sms:
-#       mode: count      # count | days
-#       value: 5000
-#     notify:
-#       mode: days       # count | days
-#       value: 30
-#     ipn:
-#       mode: days       # count | days
-#       value: 30
+# runtime:                                # default: see below
+#   check_interval: 1                     # default: 1 (seconds between polling ticks)
+#   retention:                            # default: {mode: count, value: 5000}
+#     mode: count                         # count | days
+#     value: 5000
+#   strategy: until_success               # default: until_success; options: all | until_success
+#   history_mode: from_now                # default: from_now; options: from_now | replay
+#   stale_alarm_seconds: 0                # default: 0 (disabled); >0 = alarm when no new msg for N seconds
+#   code_pattern:                         # default: no rules, no fallback
+#     fallback_to_builtin: false          # if user rules miss, fall back to built-in detector
+#     rules:
+#       - pattern: "验证码[:：]\\s*(\\d{4,8})"
+#         group: 1                        # int index or named group; omit = whole match
+#       - pattern: "(?i)code is (?P<c>\\d{6})"
+#         group: c                        # inline flags like (?i)/(?m)/(?s) live in the pattern
 
 # channel:            # defaults are built in; uncomment fields to override
-#   webhook:
-#     logmarker: "🌐"      # default: 🌐
-#     method: POST          # default: POST
 #   bark:
 #     method: POST          # default: POST
 #     url: https://api.day.app/push  # default: https://api.day.app/push
@@ -173,9 +263,13 @@ check_interval: 1     # default: 1 second
 #         $code: "🌀 验证码 {{code}}"
 #       body:
 #         $default: "{{text}}\\n{{source}} - {{time_str}}"
-#   pushgo:
-#     method: POST          # default: POST
-#     url: https://gateway.pushgo.cn/message  # default: https://gateway.pushgo.cn/message
+#     field_rewrite:                      # regex rewrite over template-context fields
+#       text:                              # key MUST be one of the template variables
+#         - pattern: "(\\d{4})\\d{8}(\\d{4})"
+#           replace: "\\1****\\2"
+#       body:
+#         - pattern: "(?i)https?://\\S+"   # use inline (?i)/(?m)/(?s) for flags
+#           replace: "[link]"
 #   tgbot:
 #     method: POST          # default: POST
 #     payload:
@@ -189,7 +283,6 @@ check_interval: 1     # default: 1 second
 #     url: https://example.com/webhook
 #     headers:
 #       Authorization: Bearer token
-#     params: {}
 #     payload:
 #       title: "{{trans}}"
 #       body: "{{text}}"
@@ -201,7 +294,6 @@ check_interval: 1     # default: 1 second
 #     payload:
 #       group: debug
 #       device_keys:
-#         - xxx
 #         - xxx
 #       icon: xxx
 #   pushgo_alarm:
@@ -223,22 +315,26 @@ check_interval: 1     # default: 1 second
 #     channel: floating
 
 # sms:
-#   strategy: until_success   # default: until_success; options: all | until_success
-#   rules:                 # default: []
+#   runtime:                  # optional per-kind overlay; falls back to runtime.<field>
+#     history_mode: replay
+#     stale_alarm_seconds: 600
+#   rules:
 #     - name_mark: code
-#       strategy: until_success
+#       strategy: until_success    # optional rule-level override
 #       filters:
 #         - type: selector
 #           match:
 #             code: true
 #       destinations:
-#         - target: webhook_test
 #         - target: bark_test_devices
 #         - target: app_floating
 
 # notify:
-#   strategy: until_success   # default: until_success; options: all | until_success
-#   rules:                 # default: []
+#   runtime:
+#     retention:
+#       mode: days
+#       value: 30
+#   rules:
 #     - name_mark: important
 #       filters:
 #         - type: and
@@ -249,8 +345,7 @@ check_interval: 1     # default: 1 second
 #         - target: lark_debug_bot
 
 # ipn:
-#   strategy: until_success   # default: until_success; options: all | until_success
-#   rules:                 # default: []
+#   rules:
 #     - name_mark: important
 #       filters:
 #         - type: selector
@@ -258,11 +353,11 @@ check_interval: 1     # default: 1 second
 #             code: true
 #       destinations:
 #         - target: app_notification
-#         - target: lark_debug_bot
-#
+
 # alarm:
-#   strategy: until_success   # default: until_success; options: all | until_success
-#   rules:                 # default: []
+#   runtime:
+#     strategy: until_success
+#   rules:
 #     - name_mark: runtime_error
 #       filters:
 #         - type: selector

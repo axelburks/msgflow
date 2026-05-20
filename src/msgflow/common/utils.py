@@ -1,4 +1,4 @@
-import json, datetime, os, subprocess, time
+import json, datetime, os, re, subprocess, time
 from typing import Any, Optional
 import regex
 import logging
@@ -109,16 +109,6 @@ def try_parse_json(value: Any) -> Any:
         return None
 
 
-def build_message_text(msg: dict[str, Any]) -> str:
-    parts = [msg.get('title'), msg.get('subtitle'), msg.get('body')]
-    return "\n".join(str(part) for part in parts if part)
-
-
-def build_message_trans(msg: dict[str, Any]) -> str:
-    parts = [msg.get('sender'), msg.get('receiver')]
-    return " <- ".join(str(part) for part in parts if part)
-
-
 def get_code_from_text(text: Optional[str]) -> Optional[str]:
     # Extract a verification/one-time code from a free-form message text.
     # Strategy:
@@ -158,6 +148,41 @@ def get_code_from_text(text: Optional[str]) -> Optional[str]:
     return code
 
 
+def extract_code(text: str, code_pattern_cfg: Optional[dict[str, Any]]) -> Optional[str]:
+    # User-defined verification-code extraction.
+    # When `code_pattern_cfg` is None (user didn't configure it at all), fall
+    # straight through to the built-in detector — no config should mean "use
+    # the default behaviour", not "disable extraction entirely".
+    #
+    # When the user *has* configured rules, try each rule in order; the first
+    # match wins. If no rule matches, `fallback_to_builtin` decides whether
+    # the built-in detector runs as a safety net.
+    if code_pattern_cfg is None:
+        return get_code_from_text(text)
+    rules = code_pattern_cfg.get("rules")
+    if not rules:
+        return get_code_from_text(text)
+    for rule in rules:
+        pattern = rule.get("pattern")
+        compiled = re.compile(pattern)
+        m = compiled.search(text)
+        if not m:
+            continue
+        group = rule.get("group")
+        try:
+            if group is None:
+                value = m.group(0)
+            else:
+                value = m.group(group)
+        except (IndexError, re.error):
+            continue
+        if value:
+            return value
+    if code_pattern_cfg.get("fallback_to_builtin"):
+        return get_code_from_text(text)
+    return None
+
+
 if __name__ == '__main__':
     # Lightweight self-test harness: runs `get_code_from_text` against the
     # sample data in ../tests/fixtures, comparing the
@@ -177,9 +202,9 @@ if __name__ == '__main__':
     def _build_text_for_notify(msg: dict[str, Any]) -> str:
         # Notify samples may store the text across title/subtitle/body; match
         # runtime behavior by concatenating the non-empty pieces.
-        if msg.get('text'):
-            return msg['text']
-        parts = [msg.get('title') or '', msg.get('subtitle') or '', msg.get('body') or '']
+        if msg.get("text"):
+            return msg["text"]
+        parts = [msg.get("title") or '', msg.get("subtitle") or '', msg.get("body") or '']
         return "\n".join(p for p in parts if p)
 
     def _run_cases(label: str, msgs: Optional[list[dict[str, Any]]], text_builder) -> tuple[int, int]:
@@ -190,7 +215,7 @@ if __name__ == '__main__':
         failed: list[tuple[int, str, Any, Any]] = []
         for i, msg in enumerate(msgs):
             text = text_builder(msg)
-            expected = msg.get('code_expected')
+            expected = msg.get("code_expected")
             got = get_code_from_text(text)
             if got != expected:
                 failed.append((i, text, expected, got))
@@ -204,7 +229,7 @@ if __name__ == '__main__':
     sms_total, sms_fail = _run_cases(
         "sms (tests/fixtures/sms/sms.json)",
         _load_json(str(test_fixture_path("sms", "sms.json"))),
-        lambda m: m.get('text') or '',
+        lambda m: m.get("text") or '',
     )
     notify_total, notify_fail = _run_cases(
         "notify (tests/fixtures/notify/notify.json)",

@@ -6,8 +6,8 @@ MsgFlow is a macOS message forwarding app. It listens for SMS and notification m
 
 ## Highlights
 
-- **Multiple sources**: reads SMS/iMessage from `~/Library/Messages/chat.db`, macOS notification records from `~/Library/Group Containers/group.com.apple.usernoted/db2/db`, and iPhone mirrored notifications from `~/Library/Group Containers/group.com.apple.UserNotifications/Library/UserNotifications/Remote/default`.
-- **Code detection**: detects verification codes in Simplified Chinese, Traditional Chinese, and English messages, with dedicated templates for code messages.
+- **Multiple sources**: listening for SMS, macOS notification, and iPhone mirrored notifications.
+- **Code detection and rewriting**: detects verification codes in Simplified Chinese, Traditional Chinese, and English messages, supports custom regex extraction, and can regex-rewrite template fields before rendering.
 - **Rule-based forwarding**: routes messages to different destinations with `and`, `or`, and `selector` filters using regex and message fields.
 - **Multiple channels**: supports `bark`, `tgbot`, `pushgo`, `lark`, `webhook`, `notification`, and `floating`.
 - **Native macOS app**: provides a menu bar app, permission setup, listener controls, Launch at Login, history window, config viewer, local notifications, and verification-code floating panels.
@@ -117,18 +117,24 @@ MsgFlow configuration is YAML and defaults to `~/.config/msgflow/config.yaml`. D
 
 The main blocks are:
 
+- `runtime`: shared runtime defaults for polling, retention, delivery strategy, replay behavior, silence alarms, and code detection.
 - `target`: named forwarding targets, each specifying a channel.
 - `sms.rules`: SMS/iMessage forwarding rules.
 - `notify.rules`: macOS notification record forwarding rules.
 - `ipn.rules`: iPhone mirrored notification forwarding rules.
 - `alarm.rules`: alert rules used when delivery fails or a source is silent for too long.
 - `channel`: optional shared defaults for channels.
-- `app`: optional app history retention settings.
 
 Each destination's final config is merged from three layers, where later layers override earlier ones:
 
 ```text
 channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destinations[]
+```
+
+Runtime fields are resolved separately:
+
+```text
+runtime.<field> < <kind>.runtime.<field>
 ```
 
 See [Configuration](./docs/configuration.md) for the full config structure, template variables, filters, command-line options, and complete examples.
@@ -137,6 +143,10 @@ See [Configuration](./docs/configuration.md) for the full config structure, temp
 
 ```yaml
 source: MacBook
+
+runtime:
+  strategy: until_success
+  history_mode: from_now
 
 target:
   bark_phone:
@@ -150,7 +160,13 @@ target:
     channel: floating
 
 sms:
-  strategy: until_success
+  runtime:
+    history_mode: replay
+    code_pattern:
+      fallback_to_builtin: true
+      rules:
+        - pattern: "(?i)code[:：]\\s*(?P<c>\\d{6})"
+          group: c
   rules:
     - name_mark: verification_codes
       filters:
@@ -181,29 +197,30 @@ alarm:
 ## Important Notes
 
 - MsgFlow only reads local macOS stores; it does not modify Messages, Notification Center, or iPhone notification files.
-- On first launch, MsgFlow starts listening from the current tail of each source and does not automatically replay historical messages.
+- With `history_mode: from_now`, MsgFlow starts from the current tail of each source; use `history_mode: replay` to restore saved remote cursors.
 - Remote channel cursors are persisted; local channels (`notification`, `floating`) do not persist cursors.
 - Unsigned or non-notarized builds may trigger Gatekeeper warnings.
 
 ## Roadmap
 
-- [x] Read SMS/iMessage from macOS Messages in real time
+- [x] Support listening to SMS
 - [x] Automatically detect verification codes in Simplified Chinese, Traditional Chinese, and English
 - [x] Forward to Bark, Telegram Bot, PushGo, Lark, Webhook, and local notifications
 - [x] Rule-based forwarding with `and`, `or`, and `selector`
 - [x] Two delivery strategies: `until_success` / `all`
-- [x] Support exception alert notifications (alarm)
+- [x] Support alarm
 - [x] Conditional templates based on `$default` and `$code`
 - [x] Strict Pydantic config validation
 - [x] Support listening to macOS notification messages
 - [x] App version with initial support for the menu bar, listener status switching, history window, and other basic features
 - [x] App support for floating panels that display messages and verification codes, with click-to-type/paste actions for specified content
 - [x] App support for multi-filtering records, rematching, resending a single destination, deleting records, viewing config, and editing cursors
-- [x] Use unix sockets for rpc communication
 - [x] App support for multilingual UI
 - [x] Support listening to notifications from iPhone
-- [x] Rule-based alarm notifications
-- [ ] App support for signing and building the app
+- [x] Rule-based alarm
+- [x] Custom regex for code detection, stale alarm timeout, and replay history
+- [x] Configure regex replacements for message fields
+- [ ] Signed App with notarization support
 
 ## Documentation
 

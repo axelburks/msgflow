@@ -8,6 +8,7 @@ def test_send_alarm_uses_rules_filters_and_kind_alarm_payload():
     flow.KIND = "sms"
     flow.source = "test-source"
     flow.alarm_strategy = "until_success"
+    flow.code_pattern_cfg = {}
     flow.alarm_rules = [
         {
             "name_mark": "ignored",
@@ -43,4 +44,4 @@ def test_send_alarm_uses_rules_filters_and_kind_alarm_payload():
     ) is True
     assert [dest["name_mark"] for dest in sent] == ["alarm_dest"]
     assert sent[0]["payload"]["title"] == "test-source: boom"
-    assert sent[0]["payload"]["body"] == "core <- ops\nalarm\nboom"
+    assert sent[0]["payload"]["body"] == "core -> ops\nalarm\nboom"

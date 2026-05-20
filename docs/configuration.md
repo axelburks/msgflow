@@ -23,14 +23,13 @@ The app stores history and logs under the same config root.
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `source` | No | `msgflow` | Device/source label exposed as `{{source}}`. |
-| `check_interval` | No | `1` | Poll interval in seconds, minimum `1`. |
+| `runtime` | No | Built in | Global runtime defaults for polling, retention, strategy, replay behavior, stale alarms, and code detection. |
 | `channel` | No | Built in | Shared defaults for each channel. |
 | `target` | Yes | - | Named forwarding targets referenced by rules. |
 | `sms` | No | Built in | SMS/iMessage forwarding rules. |
 | `notify` | No | Built in | macOS notification forwarding rules. |
 | `ipn` | No | Built in | iPhone mirrored notification forwarding rules. |
 | `alarm` | No | Built in | Alarm rules for failure and silence alerts. |
-| `app` | No | Built in | App history retention settings. |
 
 Minimal config:
 
@@ -137,13 +136,54 @@ channel.<channel> < channel.<channel>.kinds.<kind> < target.<name> < rule.destin
 
 The `kinds.<kind>` overlay is a complete channel-config override for source-specific defaults, such as `alarm`.
 
+Runtime fields are resolved separately:
+
+```text
+runtime.<field> < <kind>.runtime.<field>
+```
+
+Each kind-level `runtime` block is a partial overlay. Missing fields fall back to root `runtime`.
+
+## Runtime
+
+`runtime` defines the shared defaults for every source kind. Each kind can override any subset under `<kind>.runtime`.
+
+```yaml
+runtime:
+  check_interval: 1
+  retention:
+    mode: count
+    value: 5000
+  strategy: until_success
+  history_mode: from_now
+  stale_alarm_seconds: 0
+  code_pattern:
+    fallback_to_builtin: true
+    rules:
+      - pattern: "验证码[:：]\\s*(\\d{4,8})"
+        group: 1
+      - pattern: "(?i)code is (?P<c>\\d{6})"
+        group: c
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `check_interval` | `1` | Poll interval in seconds, minimum `1`. |
+| `retention` | `{mode: count, value: 5000}` | History retention policy. Override per kind when one source needs different retention. |
+| `strategy` | `until_success` | Default delivery strategy for the kind. Rule-level `strategy` still overrides it. |
+| `history_mode` | `from_now` | Startup cursor behavior. `from_now` starts at the current source tail; `replay` restores saved remote cursors when available. |
+| `stale_alarm_seconds` | `0` | Silence watchdog. `0` disables it; values `> 0` trigger `alarm` when no new message arrives for that many seconds. |
+| `code_pattern` | Built in detector | Custom verification-code extraction. If omitted, MsgFlow uses the built-in detector. When `rules` are configured, rules run in order and the first match wins; `group` can be an int or named group; `fallback_to_builtin` decides whether to try the built-in detector when no rule matches. Use inline regex flags like `(?i)` inside `pattern`. |
+
 ## SMS Rules
 
 `sms.rules` handles inbound messages from the macOS Messages database.
 
 ```yaml
 sms:
-  strategy: until_success
+  runtime:
+    strategy: until_success
+    history_mode: replay
   rules:
     - name_mark: code_sms
       strategy: until_success
@@ -182,7 +222,11 @@ SMS fields available to filters and templates:
 
 ```yaml
 notify:
-  strategy: until_success
+  runtime:
+    retention:
+      mode: days
+      value: 30
+    strategy: all
   rules:
     - name_mark: important_apps
       filters:
@@ -214,7 +258,10 @@ Notification fields include all common template fields plus:
 
 ```yaml
 ipn:
-  strategy: until_success
+  runtime:
+    retention:
+      mode: days
+      value: 30
   rules:
     - name_mark: iphone_codes
       filters:
@@ -278,7 +325,7 @@ filters:
 | `until_success` | Try destinations in order and stop after the first success. If all fail, trigger `alarm`. |
 | `all` | Try every destination. If any destination fails, trigger `alarm`. |
 
-A rule-level `strategy` overrides the source-level strategy.
+A rule-level `strategy` overrides the kind runtime `strategy`.
 
 ## Templates
 
@@ -324,19 +371,48 @@ Allowed conditional keys are:
 | `$default` | Normal messages or fallback. |
 | `$code` | A verification code is detected. |
 
+## Field Rewrite
+
+`field_rewrite` lets a destination rewrite template-context fields with regex before payload rendering. Rules run in order per field.
+
+```yaml
+target:
+  safe_webhook:
+    channel: webhook
+    url: https://example.com/webhook
+    field_rewrite:
+      body:
+        - pattern: "(?i)https?://\\S+"
+          replace: "[link]"
+      text:
+        - pattern: "(\\d{3})\\d{4}(\\d{4})"
+          replace: "\\1****\\2"
+    payload:
+      title: "{{trans}}"
+      body: "{{text}}"
+```
+
+Notes:
+
+- `field_rewrite` is applied before payload templates are rendered.
+- The keys are template-context fields such as `title`, `subtitle`, `body`, `text`, or `trans`.
+- When a base field like `body` is rewritten, derived fields such as `text` are recomputed automatically.
+- Use inline regex flags like `(?i)` / `(?m)` / `(?s)` inside `pattern`.
+
 ## Alarm
 
 Alarms are sent when:
 
 - A matched rule fails by its strategy.
 - Message processing raises an exception.
-- A source receives no new messages for 24 hours.
+- A source receives no new messages for `runtime.stale_alarm_seconds` seconds when that value is greater than `0`.
 
 Example:
 
 ```yaml
 alarm:
-  strategy: until_success
+  runtime:
+    strategy: until_success
   rules:
     - name_mark: alerts
       filters:
@@ -350,20 +426,25 @@ alarm:
             body: "{{msg}}\n\n{{traceback}}"
 ```
 
-## App Retention
+## Retention Overrides
 
-History retention can be configured per message kind:
+Set the shared retention policy in root `runtime`, then override it per kind when needed:
 
 ```yaml
-app:
+runtime:
   retention:
-    sms:
-      mode: count
-      value: 5000
-    notify:
+    mode: count
+    value: 5000
+
+notify:
+  runtime:
+    retention:
       mode: days
       value: 30
-    ipn:
+
+ipn:
+  runtime:
+    retention:
       mode: days
       value: 30
 ```
@@ -398,8 +479,16 @@ msgflow --mock --kind all --fixture-dir tests/fixtures
 ## Complete Example
 
 ```yaml
-check_interval: 3
 source: MacBook
+
+runtime:
+  check_interval: 3
+  retention:
+    mode: count
+    value: 5000
+  strategy: until_success
+  history_mode: from_now
+  stale_alarm_seconds: 0
 
 channel:
   bark:
@@ -434,6 +523,10 @@ target:
 
   code_panel:
     channel: floating
+    field_rewrite:
+      body:
+        - pattern: "(\\d{3})\\d{2}(\\d{3})"
+          replace: "\\1**\\2"
     payload:
       title:
         $default: "{{trans}}"
@@ -446,7 +539,13 @@ target:
         $code: "{{code}}"
 
 sms:
-  strategy: until_success
+  runtime:
+    history_mode: replay
+    code_pattern:
+      fallback_to_builtin: true
+      rules:
+        - pattern: "(?i)code[:：]\\s*(?P<c>\\d{6})"
+          group: c
   rules:
     - name_mark: sms_codes
       filters:
@@ -459,7 +558,11 @@ sms:
         - target: telegram_me
 
 notify:
-  strategy: all
+  runtime:
+    strategy: all
+    retention:
+      mode: days
+      value: 30
   rules:
     - name_mark: important_notifications
       filters:
@@ -472,7 +575,10 @@ notify:
         - target: bark_phone
 
 ipn:
-  strategy: until_success
+  runtime:
+    retention:
+      mode: days
+      value: 30
   rules:
     - name_mark: iphone_notifications
       filters:
@@ -484,7 +590,8 @@ ipn:
         - target: bark_phone
 
 alarm:
-  strategy: until_success
+  runtime:
+    strategy: until_success
   rules:
     - name_mark: alerts
       filters:
@@ -503,7 +610,7 @@ alarm:
 - `sms` uses `message.ROWID` as the cursor so delayed iPhone sync does not skip older timestamps that arrive later.
 - `notify` uses `record.delivered_date` because notification record ids can be reused after rows are deleted.
 - `ipn` uses a Unix microsecond cursor derived from `AppNotificationCreationDate` and is triggered by file changes with a periodic fallback scan.
-- New destinations start from the current database tail and do not replay historical messages automatically.
-- Remote channel cursors are persisted under `~/.config/msgflow/history/history.db`.
-- Local-only channels (`notification`, `floating`) start from the current database tail on restart to avoid duplicate local alerts.
-- History Query DSL searches stored fields such as `title`, `subtitle`, and `body`; runtime-only `text` is not stored and is not a history query field.
+- With `history_mode: from_now`, destinations start from the current source tail and ignore saved remote cursors.
+- With `history_mode: replay`, remote channel cursors are restored from `~/.config/msgflow/history/history.db` when available.
+- Local-only channels (`notification`, `floating`) always start from the current source tail on restart to avoid duplicate local alerts.
+- History Query DSL searches stored fields such as `title`, `subtitle`, and `body`; runtime-only `text` is recomputed for display but is not a history query field.

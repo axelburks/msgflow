@@ -42,7 +42,14 @@ def _runtime_with_config(built_cfg):
     obj.flows = []
     obj.status = "running"
     obj.error = None
-    obj.retention = dict(built_cfg.get("app", {}).get("retention") or {})
+    # Mirror CoreRuntime.__init__: per-kind retention sourced from
+    # `<kind>.runtime.retention` in the built config.
+    obj.retention = {}
+    for kind in ("sms", "notify", "ipn", "alarm"):
+        kind_runtime = (built_cfg.get(kind, {}) or {}).get("runtime", {}) or {}
+        kind_retention = kind_runtime.get("retention")
+        if isinstance(kind_retention, dict):
+            obj.retention[kind] = dict(kind_retention)
     obj.insert_since_last_cleanup = 0
     obj.last_cleanup_at = 0.0
     obj._loop_thread_id = None
@@ -92,7 +99,7 @@ def test_configured_destinations_for_kind_deduplicates_and_ignores_invalid_names
 
 
 def test_get_cursor_state_delegates_to_history_with_optional_kind():
-    obj = _runtime_with_config({})
+    obj = _runtime_with_config({"sms": {"rules": [{"destinations": [{"name_mark": "dest1"}]}]}})
 
     assert obj.get_cursor_state(None) == {"items": [{"kind": "sms", "destination": "dest1", "cursor_value": 5.0}]}
     assert obj.get_cursor_state("sms") == {"items": [{"kind": "sms", "destination": "dest1", "cursor_value": 5.0}]}
@@ -114,10 +121,7 @@ def test_update_cursor_state_validates_destination_and_updates_live_flow():
 @pytest.mark.parametrize(
     "cursor_map, message",
     [
-        pytest.param({}, "non-empty object", id="空 map"),
-        pytest.param({"unknown": 1}, "unknown destination", id="未知目标"),
         pytest.param({"dest1": True}, "must be numeric", id="bool 不是游标"),
-        pytest.param({"": 1}, "destination name cannot be empty", id="空目标名"),
     ],
 )
 def test_update_cursor_state_rejects_invalid_payloads(cursor_map, message):
@@ -125,6 +129,18 @@ def test_update_cursor_state_rejects_invalid_payloads(cursor_map, message):
 
     with pytest.raises(ValueError, match=message):
         obj.update_cursor_state("sms", cursor_map)
+
+
+def test_update_cursor_state_accepts_empty_or_unknown_destinations_but_filters_response():
+    obj = _runtime_with_config({"sms": {"rules": [{"destinations": [{"name_mark": "dest1"}]}]}})
+
+    assert obj.update_cursor_state("sms", {}) == {"items": [{"kind": "sms", "destination": "dest1", "cursor_value": 5.0}]}
+    assert obj.history.set_calls[0] == ("sms", {})
+
+    result = obj.update_cursor_state("sms", {"unknown": 1})
+
+    assert result == {"items": [{"kind": "sms", "destination": "dest1", "cursor_value": 5.0}]}
+    assert obj.history.set_calls[1] == ("sms", {"unknown": 1.0})
 
 
 def test_permission_issue_mentions_authorization_target(monkeypatch):
@@ -168,13 +184,9 @@ def test_apply_pending_command_invokes_start_or_pause(monkeypatch):
 def test_maybe_cleanup_history_applies_count_and_days_retention(monkeypatch):
     obj = _runtime_with_config(
         {
-            "app": {
-                "retention": {
-                    "sms": {"mode": "count", "value": 1000},
-                    "notify": {"mode": "days", "value": 7},
-                    "ipn": {"mode": "days", "value": 30},
-                }
-            }
+            "sms": {"runtime": {"retention": {"mode": "count", "value": 1000}}},
+            "notify": {"runtime": {"retention": {"mode": "days", "value": 7}}},
+            "ipn": {"runtime": {"retention": {"mode": "days", "value": 30}}},
         }
     )
     obj.insert_since_last_cleanup = obj.CLEANUP_COUNT_INTERVAL

@@ -31,12 +31,11 @@ class NotifyFlow(MsgFlow):
     KIND = "notify"
     NEW_MSG_HIT = "📬 new"
     DONE_MSG_HIT = "📭 done"
-    NO_NEW_MSG_TEXT = "no notification received for 24h"
     # Cursor uses `record.delivered_date` in its raw Mac-absolute-time form
     # (seconds since 2001-01-01). Comparing the raw column in SQL lets
     # SQLite use any index that may exist on it and avoids recomputing the
     # Unix-epoch expression for every candidate row. The Unix-epoch value
-    # is derived in Python and exposed on msg['timestamp'] for templates/logs.
+    # is derived in Python and exposed on msg["timestamp"] for templates/logs.
     #
     # `delivered_date` is written at delivery time and is strictly increasing
     # across normal notifications. Unlike `rec_id` — which is `INTEGER
@@ -56,7 +55,7 @@ class NotifyFlow(MsgFlow):
             "SELECT IFNULL(MAX(delivered_date), 0) AS max_dd FROM record "
             "WHERE delivered_date IS NOT NULL"
         )
-        return float(rows[0]['max_dd']) if rows else 0.0
+        return float(rows[0]["max_dd"]) if rows else 0.0
 
     def query_new_msgs(self) -> list[dict[str, Any]]:
         sql = """
@@ -78,12 +77,12 @@ class NotifyFlow(MsgFlow):
             try:
                 # `record.data` is a binary plist containing the notification request.
                 try:
-                    plist_data = plistlib.loads(bytes(row.get('data')))
+                    plist_data = plistlib.loads(bytes(row.get("data")))
                 except Exception as e:
                     logger.error(f"❌ notify plist decode error: {e}")
                     continue
 
-                req = plist_data.get('req') or {}
+                req = plist_data.get("req") or {}
                 title = _extract_req_field(req, 'titl')
                 subtitle = _extract_req_field(req, 'subt')
                 body = _extract_req_field(req, 'body')
@@ -94,16 +93,16 @@ class NotifyFlow(MsgFlow):
 
                 # App identity can live either on the plist ('app' key) or on
                 # the row's `identifier` column; prefer the plist value when present.
-                bundle_id = plist_data.get('app') or row.get('identifier')
+                bundle_id = plist_data.get("app") or row.get("identifier")
                 sender = get_app_name(bundle_id)
 
                 # Mac absolute time -> Unix epoch for templates/logs. `delivered_date`
                 # is also kept at the top level because it is the cursor field.
-                delivered_date = float(row.get('delivered_date'))
+                delivered_date = float(row.get("delivered_date"))
                 timestamp = delivered_date + MAC_EPOCH_OFFSET
 
-                row['app'] = plist_data.get('app')
-                row['req'] = {
+                row["app"] = plist_data.get("app")
+                row["req"] = {
                     'titl': title,
                     'subt': subtitle,
                     'body': body,

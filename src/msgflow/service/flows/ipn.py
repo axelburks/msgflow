@@ -21,7 +21,6 @@ class IPNFlow(MsgFlow):
     KIND = "ipn"
     NEW_MSG_HIT = "📱 new"
     DONE_MSG_HIT = "📱 done"
-    NO_NEW_MSG_TEXT = "no iPhone notification received for 24h"
     CURSOR_FIELD = "ipn_cursor"
     FALLBACK_SCAN_SECONDS = 60.0
 

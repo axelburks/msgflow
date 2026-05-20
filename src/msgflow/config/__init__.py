@@ -19,8 +19,10 @@ from pydantic import (
     ConfigDict,
     StrictBool,
     StrictInt,
+    field_validator,
     model_validator,
 )
+from ..common.run_models import MESSAGE_KINDS
 from ..service.channels import (
     LOCAL_CHANNELS,
     AVAILABLE_CHANNELS,
@@ -46,14 +48,14 @@ cfg: Optional["Config"] = None
 # tuples of allowed channel names lets pydantic produce precise error messages
 # for unknown channels/conditions/templates.
 Strategy: TypeAlias = Literal["all", "until_success"]
+HistoryMode: TypeAlias = Literal["from_now", "replay"]
 CondKey: TypeAlias = Literal[ALLOWED_COND_KEYS]  # type: ignore
 MatchKey: TypeAlias = Literal[ALLOWED_MATCH_TPL_VARS]  # type: ignore
 Channel: TypeAlias = Literal[AVAILABLE_CHANNELS]  # type: ignore
 LocalChannel: TypeAlias = Literal[LOCAL_CHANNELS]  # type: ignore
 ReqChannel: TypeAlias = Literal[REQ_CHANNELS]  # type: ignore
-# A CondValue is either a plain value or a conditional mapping
-# (e.g. {"$default": "...", "$code": "..."}).
 CondValue: TypeAlias = Union[str, Dict[CondKey, str], StrictInt, Dict[CondKey, StrictInt]]
+BUILT_KINDS = (*MESSAGE_KINDS, "alarm")
 
 
 class _BaseCfgModel(BaseModel):
@@ -85,6 +87,29 @@ class FloatingPayloadModel(_BaseCfgModel):
     input: CondValue
 
 
+class FieldRewriteRuleModel(_BaseCfgModel):
+    """A single regex rewrite rule, applied to one template-context field."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    pattern: str
+    replace: str
+
+    @field_validator("pattern")
+    @classmethod
+    def _pattern_compilable(cls, value: str) -> str:
+        try:
+            re.compile(value)
+        except re.error as e:
+            raise ValueError(f"invalid regex pattern: {e}")
+        return value
+
+
+# field_rewrite is a dict keyed by ALLOWED_MATCH_TPL_VARS field names; each
+# value is a list of rewrite rules applied in order. Single-dict shorthand is
+# NOT supported per spec.
+FieldRewriteModel: TypeAlias = Dict[MatchKey, List[FieldRewriteRuleModel]]
+
+
 class BuiltDestinationBase(_BaseCfgModel):
     """Shared fields for any fully-built destination (after defaults merge)."""
 
@@ -92,8 +117,9 @@ class BuiltDestinationBase(_BaseCfgModel):
     name_mark: str
     target: str
     channel: Channel
-    logmarker: Optional[str] = '🎯'
+    logmarker: Optional[str] = "🎯"
     payload: Union[Dict[str, Any], str]
+    field_rewrite: Optional[FieldRewriteModel] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate_tpl_vars(self) -> "BuiltDestinationBase":
@@ -215,6 +241,7 @@ FilterModel: TypeAlias = Annotated[
 # Destinations are generic so the same rule/flow models can be validated both
 # in the "original" (pre-build) and the "built" (post-merge) representation.
 DestT = TypeVar("DestT")
+KindRuntimeT = TypeVar("KindRuntimeT")
 
 
 class RuleModel(_BaseCfgModel, Generic[DestT]):
@@ -225,68 +252,97 @@ class RuleModel(_BaseCfgModel, Generic[DestT]):
     destinations: List[DestT]
 
 
-class SMSModel(_BaseCfgModel, Generic[DestT]):
+class _KindCfgModel(_BaseCfgModel, Generic[DestT, KindRuntimeT]):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    strategy: Strategy
+    # Kind-level runtime is a partial overlay before build and a fully-resolved
+    # RuntimeModel after build, so requiredness is enforced only by BuiltCfgModel.
+    runtime: Optional[KindRuntimeT] = Field(default_factory=dict)
     rules: List[RuleModel[DestT]] = Field(default_factory=list)
 
 
-class NotifyModel(_BaseCfgModel, Generic[DestT]):
+class SMSModel(_KindCfgModel[DestT, KindRuntimeT], Generic[DestT, KindRuntimeT]):
+    pass
+
+
+class NotifyModel(_KindCfgModel[DestT, KindRuntimeT], Generic[DestT, KindRuntimeT]):
+    pass
+
+
+class IPNModel(_KindCfgModel[DestT, KindRuntimeT], Generic[DestT, KindRuntimeT]):
+    pass
+
+
+class AlarmModel(_KindCfgModel[DestT, KindRuntimeT], Generic[DestT, KindRuntimeT]):
+    pass
+
+
+class CodePatternRuleModel(_BaseCfgModel):
+    """A single user-defined verification-code regex rule."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    strategy: Strategy
-    rules: List[RuleModel[DestT]] = Field(default_factory=list)
+    pattern: str
+    # Group selector: int index, named group string, or omitted to take the
+    # whole match (group 0). Inline regex flags like `(?i)` / `(?m)` / `(?s)`
+    # belong inside the pattern itself — no separate `flags` field is needed.
+    group: Optional[Union[StrictInt, str]] = None
+
+    @field_validator("pattern")
+    @classmethod
+    def _pattern_compilable(cls, value: str) -> str:
+        try:
+            re.compile(value)
+        except re.error as e:
+            raise ValueError(f"invalid regex pattern: {e}")
+        return value
 
 
-class IPNModel(_BaseCfgModel, Generic[DestT]):
+class CodePatternModel(_BaseCfgModel):
+    """User-defined verification-code extraction strategy."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    strategy: Strategy
-    rules: List[RuleModel[DestT]] = Field(default_factory=list)
+    fallback_to_builtin: StrictBool = False
+    rules: List[CodePatternRuleModel] = Field(default_factory=list)
 
 
-class AlarmModel(_BaseCfgModel, Generic[DestT]):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    strategy: Strategy
-    rules: List[RuleModel[DestT]] = Field(default_factory=list)
-
-
-class AppRetentionKindModel(_BaseCfgModel):
+class RetentionModel(_BaseCfgModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     mode: Literal["count", "days"]
     value: int = Field(ge=1)
 
 
-class AppRetentionModel(_BaseCfgModel):
+class RuntimeModel(_BaseCfgModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    sms: AppRetentionKindModel
-    notify: AppRetentionKindModel
-    ipn: AppRetentionKindModel
-
-
-class AppModel(_BaseCfgModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    retention: AppRetentionModel
+    check_interval: int = Field(ge=1)
+    retention: RetentionModel
+    strategy: Strategy
+    history_mode: HistoryMode
+    stale_alarm_seconds: int = Field(ge=0)
+    code_pattern: Optional[CodePatternModel] = None
 
 
 class TargetModel(_BaseCfgModel):
     channel: Channel
 
 
-class CfgModel(_BaseCfgModel, Generic[DestT]):
-    check_interval: int = Field(ge=1)
+class CfgModel(_BaseCfgModel, Generic[DestT, KindRuntimeT]):
     source: str
-    target: Dict[str, TargetModel]
-    sms: SMSModel[DestT]
-    notify: NotifyModel[DestT]
-    ipn: IPNModel[DestT]
-    alarm: AlarmModel[DestT]
-    app: AppModel
+    runtime: RuntimeModel
+    target: Dict[str, TargetModel] = Field(default_factory=dict)
+    sms: SMSModel[DestT, KindRuntimeT] = Field(default_factory=SMSModel)
+    notify: NotifyModel[DestT, KindRuntimeT] = Field(default_factory=NotifyModel)
+    ipn: IPNModel[DestT, KindRuntimeT] = Field(default_factory=IPNModel)
+    alarm: AlarmModel[DestT, KindRuntimeT] = Field(default_factory=AlarmModel)
 
 
 # Two concrete config shapes:
 #   - Effective: user-authored config merged with defaults (targets still by name).
 #   - Built:    fully-resolved config with every destination expanded.
-EffectiveCfgModel: TypeAlias = CfgModel[OriDestinationModel]
-BuiltCfgModel: TypeAlias = CfgModel[BuiltDestinationModel]
+class EffectiveCfgModel(CfgModel[OriDestinationModel, Dict[str, Any]]):
+    pass
+
+
+class BuiltCfgModel(CfgModel[BuiltDestinationModel, RuntimeModel]):
+    pass
 
 
 class Config:
@@ -308,24 +364,41 @@ class Config:
         self.debug_mode = debug
 
     def _update_cfg(self, debug: bool) -> None:
-        # Load YAML, merge with defaults and build the resolved destination tree.
-        # Splitting this into a separate method (instead of doing it inline in
-        # `__init__`) lets the `debug_mode` setter re-run it when toggled.
+        # Rebuild the entire config pipeline whenever the source path changes.
         self.config_root_dir = str(config_root_dir())
         self.config_file_path = str(config_file_path(debug))
         self.history_file_path = str(history_file_path(debug))
         self._ensure_config_files(debug)
-        with open(self.config_file_path, 'r') as fp:
-            self.user_cfg: Dict[str, Any] = yaml.safe_load(fp) or {}
-        self.effective_cfg: Dict[str, Any] = deep_merge_dicts(self.default_cfg, self.user_cfg)
+        self.user_cfg = self._load_user_cfg()
+        self.effective_cfg = self._build_effective_cfg()
         self._validate_effective_cfg()
-        built_overlay = {}
-        for key in ("sms", "notify", "ipn", "alarm"):
-            rules = self._build_rules_by_key(key)
-            if rules:
-                built_overlay[key] = {"rules": rules}
-        self.built_cfg: Dict[str, Any] = deep_merge_dicts(self.effective_cfg, built_overlay)
+        self.built_cfg = self._build_built_cfg()
         self._validate_built_cfg()
+
+    def _load_user_cfg(self) -> Dict[str, Any]:
+        with open(self.config_file_path, 'r', encoding="utf-8") as fp:
+            return yaml.safe_load(fp) or {}
+
+    def _build_effective_cfg(self) -> Dict[str, Any]:
+        return deep_merge_dicts(self.default_cfg, self.user_cfg)
+
+    def _build_kind_runtime(self, kind: str) -> Dict[str, Any]:
+        return deep_merge_dicts(
+            {"runtime": self.effective_cfg["runtime"]},
+            self.effective_cfg[kind],
+        )
+
+    def _build_kind_cfg(self, kind: str) -> Dict[str, Any]:
+        built_kind_cfg = self._build_kind_runtime(kind)
+        built_kind_cfg["rules"] = self._build_rules_by_kind(kind, built_kind_cfg)
+        return built_kind_cfg
+
+    def _build_built_cfg(self) -> Dict[str, Any]:
+        built_overlay = {
+            kind: self._build_kind_cfg(kind)
+            for kind in BUILT_KINDS
+        }
+        return deep_merge_dicts(self.effective_cfg, built_overlay)
 
     def _ensure_config_files(self, debug: bool) -> None:
         config_path = config_file_path(debug)
@@ -344,19 +417,23 @@ class Config:
         self._debug_mode = value
         self._update_cfg(debug=self._debug_mode)
 
-    def _resolve_destination(self, destination: Dict[str, Any], kind: Optional[str] = None) -> Dict[str, Any]:
+    def _resolve_destination(
+        self,
+        destination: Dict[str, Any],
+        kind: Optional[str] = None,
+    ) -> Dict[str, Any]:
         # Merge precedence (low -> high):
         #   channel defaults -> channel.kinds[kind] overlay -> user target cfg -> destination overrides
         # This lets channel-level/kind-level/target-level settings compose cleanly.
-        target_name = destination['target']
-        targets = self.effective_cfg['target']
+        target_name = destination["target"]
+        targets = self.effective_cfg["target"]
         if target_name not in targets:
             raise ValueError(
                 f"unknown target '{target_name}', available: {sorted(targets.keys())}"
             )
         user_target_cfg = targets[target_name]
-        channel_name = user_target_cfg['channel']
-        channel_cfg = self.effective_cfg['channel'].get(channel_name) or {}
+        channel_name = user_target_cfg["channel"]
+        channel_cfg = self.effective_cfg["channel"].get(channel_name) or {}
         kinds = channel_cfg.get("kinds") if isinstance(channel_cfg.get("kinds"), dict) else {}
         channel_base = {
             key: value
@@ -374,7 +451,7 @@ class Config:
         merged.pop("kinds", None)
         # Default the display name to the target name; per-destination
         # `name_mark` still wins when provided.
-        merged['name_mark'] = destination.get('name_mark') or target_name
+        merged["name_mark"] = destination.get("name_mark") or target_name
         return merged
 
     def _build_destinations(
@@ -391,41 +468,39 @@ class Config:
             try:
                 dest_merged = self._resolve_destination(dest, kind=kind)
             except Exception as e:
-                raise Exception(f"destinations[{idx}]: {e}")
-            name_mark = dest_merged['name_mark']
+                raise ValueError(f"destinations[{idx}]: {e}")
+            name_mark = dest_merged["name_mark"]
             if name_mark_prefix:
                 # Scope the name_mark under its rule/kind so the same target can
                 # be reused safely in multiple rules with independent cursors.
                 name_mark = f"{name_mark_prefix}_{name_mark}"
                 dest_merged["name_mark"] = name_mark
             if name_mark in name_marks:
-                raise Exception(f"duplicate destination name_mark '{name_mark}'")
+                raise ValueError(f"duplicate destination name_mark '{name_mark}'")
             name_marks.add(name_mark)
             built.append(dest_merged)
         return built
 
-    def _build_rules_by_key(self, key: str) -> List[Dict[str, Any]]:
+    def _build_rules_by_kind(self, kind: str, built_kind_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Build a list of fully-resolved rules for a given flow kind.
-        opt = self.effective_cfg.get(key)
-        if not opt.get('rules'):
-            return []
-        default_strategy = opt.get('strategy')
-        rules = opt.get('rules') or []
+        default_strategy = built_kind_cfg["runtime"]["strategy"]
+        rules = built_kind_cfg["rules"]
         built_rules: List[Dict[str, Any]] = []
         for rule in rules:
-            rule_name_mark = rule['name_mark']
-            filters = rule.get('filters', [])
-            # Rule-level strategy overrides the flow default when provided.
-            strategy = rule.get('strategy') or default_strategy
-            destinations = rule['destinations']
+            rule_name_mark = rule["name_mark"]
+            filters = rule.get("filters", [])
+            # `strategy` stays optional; flow code resolves the inheritance
+            # chain (rule -> kind.runtime) at use-site, same as alarm_rules.
+            strategy = rule.get("strategy") or default_strategy
+            destinations = rule["destinations"]
             try:
                 built_dests = self._build_destinations(
                     destinations,
-                    name_mark_prefix=f"{key}_{rule_name_mark}",
-                    kind=key,
+                    name_mark_prefix=f"{kind}_{rule_name_mark}",
+                    kind=kind,
                 )
             except Exception as e:
-                raise Exception(f"build_{key}_rules error: rule '{rule_name_mark}' destinations: {e}")
+                raise ValueError(f"build_{kind}_rules error: rule '{rule_name_mark}' destinations: {e}")
 
             built_rules.append(
                 {
