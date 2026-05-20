@@ -19,6 +19,7 @@ BUILD_DIR = ROOT_DIR / "build"
 PACKAGING_DIR = ROOT_DIR / "packaging"
 PYINSTALLER_CONFIG_DIR = ROOT_DIR / ".pyinstaller-cache"
 MIN_MACOS_VERSION = "11.0"
+SUPPORTED_MACOS_ARCHES = ("arm64", "x86_64")
 
 
 def run(command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -47,6 +48,103 @@ def project_version() -> str:
     if match is None:
         raise RuntimeError("pyproject.toml does not define [project].version")
     return match.group(1)
+
+
+def normalize_arch(raw_arch: str) -> str:
+    arch = raw_arch.lower()
+    arch = arch.replace("aarch64", "arm64")
+    arch = arch.replace("amd64", "x86_64")
+    arch = arch.replace("x64", "x86_64")
+    return arch
+
+
+def discover_archives(out_dir: Path, version: str, prefix: str, suffix: str) -> dict[str, Path]:
+    assets: dict[str, Path] = {}
+    pattern = f"{prefix}-{version}-macos-*{suffix}"
+    for path in sorted(out_dir.glob(pattern)):
+        arch = path.name.removeprefix(f"{prefix}-{version}-macos-").removesuffix(suffix)
+        assets[arch] = path
+    return assets
+
+
+def release_asset_url(release_base_url: str, archive_path: Path) -> str:
+    if not release_base_url:
+        return ""
+    return f"{release_base_url}/{archive_path.name}"
+
+
+def render_cli_source(cli_archives: dict[str, Path], release_base_url: str) -> str:
+    if not cli_archives:
+        raise FileNotFoundError("missing CLI archives for Homebrew formula generation")
+    if len(cli_archives) == 1:
+        arch, archive_path = next(iter(cli_archives.items()))
+        return (
+            f'  url "{release_asset_url(release_base_url, archive_path)}"\n'
+            f'  sha256 "{sha256_file(archive_path)}"\n'
+            f'  # Built for macOS {arch}.'
+        )
+
+    blocks: list[str] = []
+    if "arm64" in cli_archives:
+        archive_path = cli_archives["arm64"]
+        blocks.append(
+            "\n".join(
+                [
+                    "  on_arm do",
+                    f'    url "{release_asset_url(release_base_url, archive_path)}"',
+                    f'    sha256 "{sha256_file(archive_path)}"',
+                    "  end",
+                ]
+            )
+        )
+    if "x86_64" in cli_archives:
+        archive_path = cli_archives["x86_64"]
+        blocks.append(
+            "\n".join(
+                [
+                    "  on_intel do",
+                    f'    url "{release_asset_url(release_base_url, archive_path)}"',
+                    f'    sha256 "{sha256_file(archive_path)}"',
+                    "  end",
+                ]
+            )
+        )
+    if not blocks:
+        raise RuntimeError("Homebrew formula generation requires at least one supported macOS architecture")
+    return "\n\n".join(blocks)
+
+
+def render_app_source(app_archives: dict[str, Path], release_base_url: str) -> str:
+    if not app_archives:
+        raise FileNotFoundError("missing app archives for Homebrew cask generation")
+    if len(app_archives) == 1:
+        _, archive_path = next(iter(app_archives.items()))
+        return "\n".join(
+            [
+                f'  sha256 "{sha256_file(archive_path)}"',
+                "",
+                f'  url "{release_asset_url(release_base_url, archive_path)}"',
+            ]
+        )
+
+    arch_entries: list[str] = []
+    sha_entries: list[str] = []
+    if "arm64" in app_archives:
+        arch_entries.append('arm: "arm64"')
+        sha_entries.append(f'arm: "{sha256_file(app_archives["arm64"])}"')
+    if "x86_64" in app_archives:
+        arch_entries.append('intel: "x86_64"')
+        sha_entries.append(f'intel: "{sha256_file(app_archives["x86_64"])}"')
+    if not arch_entries or not sha_entries:
+        raise RuntimeError("Homebrew cask generation requires at least one supported macOS architecture")
+    return "\n".join(
+        [
+            f"  arch {', '.join(arch_entries)}",
+            f"  sha256 {', '.join(sha_entries)}",
+            "",
+            f'  url "{release_base_url}/msgflow-app-#{{version}}-macos-#{{arch}}.zip"',
+        ]
+    )
 
 
 def clean_package_metadata() -> None:
@@ -196,6 +294,29 @@ def archive_app(version: str, arch: str, out_dir: Path) -> Path:
     return archive_path
 
 
+def render_homebrew_files(version: str, tag: str, repo: str, out_dir: Path) -> None:
+    homepage = f"https://github.com/{repo}" if repo else "https://github.com/axel/msgflow"
+    release_base_url = f"{homepage}/releases/download/{tag}" if repo else ""
+    cli_archives = discover_archives(out_dir, version, "msgflow", ".tar.gz")
+    app_archives = discover_archives(out_dir, version, "msgflow-app", ".zip")
+    replacements = {
+        "VERSION": version,
+        "HOMEPAGE": homepage,
+        "CLI_SOURCE": render_cli_source(cli_archives, release_base_url),
+        "APP_SOURCE": render_app_source(app_archives, release_base_url),
+    }
+    render_template(
+        PACKAGING_DIR / "homebrew" / "msgflow.rb.tmpl",
+        out_dir / "homebrew" / "Formula" / "msgflow.rb",
+        replacements,
+    )
+    render_template(
+        PACKAGING_DIR / "homebrew" / "msgflow-app.rb.tmpl",
+        out_dir / "homebrew" / "Casks" / "msgflow-app.rb",
+        replacements,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build msgflow release artifacts")
     parser.add_argument(
@@ -206,7 +327,18 @@ def main() -> None:
     parser.add_argument("--tag", default=None, help="git tag name, defaults to v<version>")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""), help="owner/repo for release URLs")
     parser.add_argument("--out-dir", default="release", help="output directory relative to project root")
+    parser.add_argument(
+        "--arch",
+        default=None,
+        help="override the macOS architecture label used in archive names, defaults to the current machine",
+    )
     parser.add_argument("--skip-build", action="store_true", help="reuse existing dist artifacts")
+    parser.add_argument("--skip-homebrew", action="store_true", help="skip rendering Homebrew Formula/Cask files")
+    parser.add_argument(
+        "--render-homebrew-only",
+        action="store_true",
+        help="render Homebrew Formula/Cask files from existing archives in --out-dir without building",
+    )
     parser.add_argument(
         "--smoke-homebrew",
         action="store_true",
@@ -224,7 +356,13 @@ def main() -> None:
         )
     out_dir = ROOT_DIR / args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    arch = platform.machine().lower().replace("aarch64", "arm64")
+    arch = normalize_arch(args.arch or platform.machine())
+    if arch not in SUPPORTED_MACOS_ARCHES:
+        print(f"warning: building unsupported macOS architecture label {arch!r}", file=sys.stderr)
+
+    if args.render_homebrew_only:
+        render_homebrew_files(version, tag, args.repo, out_dir)
+        return
 
     if not args.skip_build:
         refresh_package_metadata()
@@ -249,29 +387,8 @@ def main() -> None:
         if args.smoke_homebrew:
             verify_app_archive_launches(app_archive)
 
-    homepage = f"https://github.com/{args.repo}" if args.repo else "https://github.com/axel/msgflow"
-    release_base_url = f"{homepage}/releases/download/{tag}" if args.repo else ""
-    cli_url = f"{release_base_url}/{cli_archive.name}" if release_base_url else ""
-    app_url = f"{release_base_url}/{app_archive.name}" if release_base_url else ""
-
-    replacements = {
-        "VERSION": version,
-        "HOMEPAGE": homepage,
-        "CLI_URL": cli_url,
-        "CLI_SHA256": sha256_file(cli_archive),
-        "APP_URL": app_url,
-        "APP_SHA256": sha256_file(app_archive),
-    }
-    render_template(
-        PACKAGING_DIR / "homebrew" / "msgflow.rb.tmpl",
-        out_dir / "homebrew" / "Formula" / "msgflow.rb",
-        replacements,
-    )
-    render_template(
-        PACKAGING_DIR / "homebrew" / "msgflow-app.rb.tmpl",
-        out_dir / "homebrew" / "Casks" / "msgflow-app.rb",
-        replacements,
-    )
+    if not args.skip_homebrew:
+        render_homebrew_files(version, tag, args.repo, out_dir)
 
 
 if __name__ == "__main__":

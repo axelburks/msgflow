@@ -158,6 +158,13 @@ The default version comes from `[project].version` in `pyproject.toml`. Override
 make build VERSION=0.2.0
 ```
 
+To label the release artifacts for a specific macOS architecture, pass `--arch` explicitly:
+
+```bash
+.venv/bin/python scripts/release.py --repo <owner>/<repo> --arch x86_64
+.venv/bin/python scripts/release.py --repo <owner>/<repo> --arch arm64
+```
+
 Outputs:
 
 ```text
